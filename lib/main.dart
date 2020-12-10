@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-
-import 'ocr_testing.dart';
+import 'package:liber/scanning_screens.dart';
 
 void main() {
-  runApp(MyApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(Liber());
 }
 
-class MyApp extends StatelessWidget {
+class Liber extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -14,7 +14,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: OCRPage(),
+      home: BarcodeScanner(),
     );
   }
 }
