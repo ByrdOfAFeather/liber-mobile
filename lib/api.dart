@@ -13,6 +13,7 @@ class Book {
   String edition;
   String publishDate;
   String format;
+  String isbn;
   List<String> authors;
   List<String> publishers;
 
@@ -24,6 +25,7 @@ class Book {
     publishers = List<String>.from(json["publishers"]);
     imageURL = json["imageURL"];
     format = json["physicalFormat"];
+    isbn = json["isbn"];
   }
 }
 
@@ -35,12 +37,57 @@ Future<bool> addBook() async {
   return null;
 }
 
-dynamic OLNullParser(data, placeholder) {
-  if (data == null) {
-    return placeholder;
-  } else {
-    return data;
+// dynamic OLNullParser(data, placeholder) {
+//   if (data == null) {
+//     return placeholder;
+//   } else {
+//     return data;
+//   }
+// }
+
+Future<List<String>> parseAuthors(List<dynamic> potentialAuthors) async {
+  /*
+   * There's two cases for the author. Both are lists of dictionaries.
+   * If the request is coming from the /api endpoint, there will be name/url
+   * If the request is coming from the /isbn/.json endpoint, there will only
+   * be key
+   */
+
+  if (potentialAuthors == null) {
+    return ["Unknown"];
   }
+  List<String> returnList = [];
+  if (potentialAuthors.isNotEmpty) {
+    for (dynamic authorDict in potentialAuthors) {
+      String author = authorDict["name"];
+      if (author == null) {
+        String authorLink = authorDict["key"];
+        if (authorLink == null) {
+          authorLink = "${authorDict['url']}.json";
+        } else {
+          authorLink = "$OPEN_LIB_API/$authorLink.json";
+        }
+
+        http.Response authorRes =
+        await http.get("$OPEN_LIB_API/$authorLink.json");
+
+        if (authorRes.statusCode != 200) {
+          // This is a very bad position to be in. We will have to define
+          // the author as unknown.
+          // TODO: Perhaps a little more can be done in this case
+          returnList.add("Unknown");
+        } else {
+          Map<String, dynamic> authorJsonResponse = json.decode(authorRes.body);
+          returnList.add(authorJsonResponse["name"]);
+        }
+      } else {
+        returnList.add(author);
+      }
+    }
+  } else {
+    returnList.add("Unknown");
+  }
+  return returnList;
 }
 
 Future<Book> searchOLByISBN(String ISBN) async {
@@ -56,38 +103,27 @@ Future<Book> searchOLByISBN(String ISBN) async {
     http.Response isbnRes = await http.get("$OPEN_LIB_API/isbn/$ISBN.json");
     if (isbnRes.statusCode == 200) {
       Map<String, dynamic> jsonResponse = json.decode(isbnRes.body);
+      List<String> authorsList;
 
-      // Authors are returned in the form of a list of links to the author
-      // pages. Thus, we have to loop and get each author.
-      List<dynamic> authorsDicts = jsonResponse["authors"] as List<dynamic>;
-      List<String> authorsList = [];
-
-      print("THIS IS AUTHORS DICTS");
-      print(authorsDicts);
-      print("END =====");
-      if (authorsDicts != null) {
-        for (dynamic authorDict in authorsDicts) {
-          String authorLink = authorDict["key"];
-          http.Response authorRes =
-          await http.get("$OPEN_LIB_API/$authorLink.json");
-          if (authorRes.statusCode != 200) {
-            // This is a very bad position to be in. We will have to define
-            // the author as unknown.
-            // TODO: Perhaps a little more can be done in this case
-            authorsList.add("Failed to get author");
-          }
-          Map<String, dynamic> authorJsonResponse = json.decode(authorRes.body);
-          authorsList.add(authorJsonResponse["name"]);
+      if (jsonResponse["author"] == null) {
+        http.Response authorRes = await http.get(
+            "$OPEN_LIB_API/api/books?bibkeys=ISBN:$ISBN&jscmd=data&format=json");
+        if (authorRes.statusCode == 200) {
+          List<dynamic> authorsDicts = json.decode(authorRes.body)["ISBN:$ISBN"]["authors"] as List<dynamic>;
+          authorsList = await parseAuthors(authorsDicts);
+        } else {
+          // TODO: This is the error case where there was not authors
+          // in the book in the first place but then we had an error when
+          // trying the alternate api
         }
       } else {
-        authorsList.add("Unknown");
+        // Authors are returned in the form of a list of links to the author
+        // pages. Thus, we have to loop and get each author.
+        List<dynamic> authorsDicts = jsonResponse["authors"] as List<dynamic>;
+        authorsList = await parseAuthors(authorsDicts);
       }
 
       // If publishers are null this becomes an issue for a downstream task
-      jsonResponse["publishers"] =
-          OLNullParser(jsonResponse["publishers"], ["Unknown"]);
-      jsonResponse["publish_date"] =
-          OLNullParser(jsonResponse["publish_date"], "Unknown");
 
       Map<String, dynamic> bookInfo = {
         "title": jsonResponse["title"],
@@ -95,8 +131,8 @@ Future<Book> searchOLByISBN(String ISBN) async {
         "publishDate": jsonResponse["publish_date"],
         "publishers": jsonResponse["publishers"],
         "imageURL": "$COVER_OPEN_LIB_API/b/isbn/$ISBN.jpg",
-        "physicalFormat":
-        OLNullParser(jsonResponse["physical_format"], "Unknown")
+        "physicalFormat": jsonResponse["physical_format"],
+        "isbn": ISBN
       };
       return Book.fromJson(bookInfo);
     } else {

@@ -4,7 +4,6 @@ import 'package:liber/local_database.dart';
 
 import 'api.dart';
 
-
 class BookInfoForm extends StatefulWidget {
   final Book initData;
 
@@ -17,7 +16,16 @@ class BookInfoForm extends StatefulWidget {
 }
 
 class _BookInfoForm extends State<BookInfoForm> {
+  bool _isSoftback = false;
+  bool _isHardback = false;
   GlobalKey<FormState> _formKey = new GlobalKey<FormState>();
+
+  @override
+  void initState() {
+    _isSoftback = widget.initData.format == "softback";
+    _isHardback = widget.initData.format == "hardback";
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,36 +33,102 @@ class _BookInfoForm extends State<BookInfoForm> {
       print("Oops I got here");
       return Text("Bruh");
     }
+
+    Widget physicalFormatInput;
+    if (widget.initData.format != null) {
+      physicalFormatInput = Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          ChoiceChip(
+            label: Text("Hardback"),
+            labelStyle: TextStyle(color: Colors.white),
+            selected: _isHardback,
+            onSelected: (bool newInput) => {
+              setState(() {
+                _isHardback = !_isHardback;
+                if (_isSoftback) {
+                  _isSoftback = !_isSoftback;
+                }
+              })
+            },
+            selectedColor: Colors.blue,
+            backgroundColor: Colors.red,
+          ),
+          Text("Or"),
+          ChoiceChip(
+            label: Text("Softback"),
+            labelStyle: TextStyle(color: Colors.white),
+            selected: _isSoftback,
+            onSelected: (bool newInput) => {
+              setState(() {
+                _isSoftback = !_isSoftback;
+                if (_isHardback) {
+                  _isHardback = !_isHardback;
+                }
+                print(_isSoftback);
+              })
+            },
+            selectedColor: Colors.blue,
+            backgroundColor: Colors.red,
+          )
+        ],
+      );
+    } else {
+      physicalFormatInput = Container();
+    }
+
     return Form(
         key: _formKey,
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Center(
-              child: Image.network(widget.initData.imageURL),
+              child: Image.network(widget.initData.imageURL, frameBuilder: (BuildContext context, Widget child, int frame, bool wasSyncLoaded) {
+                if (wasSyncLoaded) {
+                  return child;
+                }
+                return AnimatedOpacity(
+                  child: child,
+                  opacity: frame == null ? 0 : 1,
+                  duration: const Duration(seconds: 1),
+                  curve: Curves.easeOut,
+                );
+              }),
             ),
-            TextFormField(
-                initialValue: widget.initData.title,
-                decoration: InputDecoration(
-                    labelText: "Book Title"
-                )),
-            TextFormField(
-              initialValue: widget.initData.publishDate,
-              decoration: InputDecoration(
-                  labelText: "Publish Date"
+            ListTile(
+              title: TextFormField(
+                  initialValue: widget.initData.title,
+                  decoration: InputDecoration(labelText: "Book Title")),
+            ),
+            ListTile(
+              title: TextFormField(
+                initialValue: widget.initData.publishDate,
+                decoration: InputDecoration(labelText: "Publish Date"),
               ),
             ),
+            ListTile(
+              title: TextFormField(
+                initialValue: widget.initData.isbn,
+                decoration: InputDecoration(
+                  labelText: "ISBN Number",
+                ),
+              ),
+            ),
+            ListTile(
+              title: TextFormField(
+                initialValue: widget.initData.authors[0],
+              )
+            ),
+            physicalFormatInput,
           ],
-        )
-    );
+        ));
   }
 }
-
 
 class BookForm extends StatefulWidget {
   final PreBookData initializationData;
 
   const BookForm({Key key, this.initializationData}) : super(key: key);
+
   @override
   State<StatefulWidget> createState() {
     return _BookFormState();
@@ -76,11 +150,14 @@ class _BookFormState extends State<BookForm> {
   Widget build(BuildContext context) {
     if (widget.initializationData.found == 1) {
       return Scaffold(
+        appBar: AppBar(
+          title: Text("Add Book"),
+        ),
         body: FutureBuilder(
             future: bookData,
             builder: (BuildContext context, AsyncSnapshot snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return CircularProgressIndicator();
+                return Center(child: CircularProgressIndicator());
               } else if (snapshot.connectionState == ConnectionState.done) {
                 if (snapshot.data == null) {
                   return BookInfoForm();
@@ -93,8 +170,7 @@ class _BookFormState extends State<BookForm> {
                 print(snapshot.data);
                 return Text("ERROR");
               }
-            }
-        ),
+            }),
       );
     }
     return null;
