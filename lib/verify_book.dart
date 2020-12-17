@@ -4,6 +4,170 @@ import 'package:liber/local_database.dart';
 
 import 'api.dart';
 
+Function blueBackgroundWhiteAccent = (String labelText) => InputDecoration(
+  labelText: labelText,
+  labelStyle: TextStyle(color: Colors.white),
+  enabledBorder: UnderlineInputBorder(
+    borderSide: BorderSide(color: Colors.white),
+  ),
+  focusedBorder: UnderlineInputBorder(
+    borderSide: BorderSide(color: Colors.black),
+  ),
+  border: UnderlineInputBorder(
+    borderSide: BorderSide(color: Colors.white),
+  ),
+);
+
+class PaginationWidget extends StatefulWidget {
+  // This can be used for authors or publishers or even
+  // books when viewing from the author/publisher perspective
+  final Function futureGetter;
+  final Function onSelect;
+
+  const PaginationWidget({Key key, this.futureGetter, this.onSelect})
+      : super(key: key);
+
+  @override
+  State<StatefulWidget> createState() {
+    return _PaginationWidgetState();
+  }
+}
+
+class _PaginationWidgetState extends State<PaginationWidget> {
+  Future<Map<String, dynamic>> future;
+  int paginationIndex = 0;
+
+  @override
+  void initState() {
+    future = widget.futureGetter(paginationIndex);
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.maxFinite,
+      child: FutureBuilder(
+        future: future,
+        builder: (BuildContext context, AsyncSnapshot snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return Center(child: CircularProgressIndicator());
+          } else {
+            if (snapshot.hasData && snapshot.data != null) {
+              List<Publisher> pagination = snapshot.data["publishers"];
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                      icon: Icon(Icons.arrow_upward),
+                      onPressed: () {
+                        setState(() {
+                          if (paginationIndex == 0) {
+                            return;
+                          } else {
+                            paginationIndex -= 5;
+                            future = widget.futureGetter(paginationIndex);
+                          }
+                        });
+                      }),
+                  Expanded(
+                    child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: pagination.length,
+                        itemBuilder: (BuildContext context, int index) {
+                          return Card(
+                            child: ListTile(
+                              trailing: Icon(Icons.check),
+                              title: Text(pagination[index].name),
+                              onTap: () => widget.onSelect(pagination[index]),
+                            ),
+                          );
+                        }),
+                  ),
+                  // TODO: This needs to disappear when pagination is complete
+                  IconButton(
+                      icon: Icon(Icons.arrow_downward),
+                      onPressed: () {
+                        setState(() {
+                          paginationIndex += 5;
+                          future = widget.futureGetter(paginationIndex);
+                        });
+                      }),
+                ],
+              );
+            } else {
+              return Text("Connection Failed.");
+            }
+          }
+        },
+      ),
+    );
+  }
+}
+
+class _PublisherSelect extends StatefulWidget {
+  final Publisher initPublisher;
+
+  const _PublisherSelect({Key key, this.initPublisher}) : super(key: key);
+
+  @override
+  State<StatefulWidget> createState() {
+    return _PublisherSelectState();
+  }
+}
+
+class _PublisherSelectState extends State<_PublisherSelect> {
+  Publisher selectedPublisher;
+  String cardText;
+
+  @override
+  void initState() {
+    selectedPublisher = widget.initPublisher;
+    cardText = selectedPublisher?.name;
+    cardText ??= "Unselected";
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        trailing: IconButton(
+            icon: Icon(Icons.delete),
+            onPressed: () {
+              // TODO: Delete this publisher (this one is sort of hard I guess)
+              // setState(() {
+              //   // widget.initData.publishers.remove(value)
+              // });
+            }),
+        onTap: () async {
+          var futurePublisher = await showDialog(
+              context: context,
+              builder: (BuildContext context) {
+                return AlertDialog(
+                  content: PaginationWidget(
+                    futureGetter: getPublishersPagination,
+                    onSelect: (Publisher newSelectedPublisher) {
+                      print(newSelectedPublisher);
+                      Navigator.of(context).pop(newSelectedPublisher);
+                    },
+                  ),
+                );
+              });
+          if (futurePublisher != null) {
+            setState(() {
+              print(futurePublisher.name);
+              selectedPublisher = futurePublisher as Publisher;
+              cardText = selectedPublisher.name;
+            });
+          }
+        },
+        title: Text(cardText),
+      ),
+    );
+  }
+}
+
 class BookInfoForm extends StatefulWidget {
   final Book initData;
 
@@ -18,12 +182,14 @@ class BookInfoForm extends StatefulWidget {
 class _BookInfoForm extends State<BookInfoForm> {
   bool _isSoftback = false;
   bool _isHardback = false;
+  List<Publisher> selectedPublishers;
   GlobalKey<FormState> _formKey = new GlobalKey<FormState>();
 
   @override
   void initState() {
-    _isSoftback = widget.initData.format == "softback";
-    _isHardback = widget.initData.format == "hardback";
+    selectedPublishers = widget.initData?.publishers;
+    _isSoftback = widget.initData?.format == "softback";
+    _isHardback = widget.initData?.format == "hardback";
     super.initState();
   }
 
@@ -51,10 +217,10 @@ class _BookInfoForm extends State<BookInfoForm> {
                 }
               })
             },
-            selectedColor: Colors.blue,
+            selectedColor: Colors.green,
             backgroundColor: Colors.red,
           ),
-          Text("Or"),
+          Text("Or", style: TextStyle(color: Colors.white)),
           ChoiceChip(
             label: Text("Softback"),
             labelStyle: TextStyle(color: Colors.white),
@@ -68,7 +234,7 @@ class _BookInfoForm extends State<BookInfoForm> {
                 print(_isSoftback);
               })
             },
-            selectedColor: Colors.blue,
+            selectedColor: Colors.green,
             backgroundColor: Colors.red,
           )
         ],
@@ -79,47 +245,111 @@ class _BookInfoForm extends State<BookInfoForm> {
 
     return Form(
         key: _formKey,
-        child: Column(
-          children: [
-            Center(
-              child: Image.network(widget.initData.imageURL, frameBuilder: (BuildContext context, Widget child, int frame, bool wasSyncLoaded) {
-                if (wasSyncLoaded) {
-                  return child;
-                }
-                return AnimatedOpacity(
-                  child: child,
-                  opacity: frame == null ? 0 : 1,
-                  duration: const Duration(seconds: 1),
-                  curve: Curves.easeOut,
-                );
-              }),
-            ),
-            ListTile(
-              title: TextFormField(
-                  initialValue: widget.initData.title,
-                  decoration: InputDecoration(labelText: "Book Title")),
-            ),
-            ListTile(
-              title: TextFormField(
-                initialValue: widget.initData.publishDate,
-                decoration: InputDecoration(labelText: "Publish Date"),
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              Center(
+                child: Image.network(widget.initData.imageURL, frameBuilder:
+                    (BuildContext context, Widget child, int frame,
+                    bool wasSyncLoaded) {
+                  if (wasSyncLoaded) {
+                    return child;
+                  }
+                  return AnimatedOpacity(
+                    child: child,
+                    opacity: frame == null ? 0 : 1,
+                    duration: const Duration(seconds: 1),
+                    curve: Curves.easeOut,
+                  );
+                }),
               ),
-            ),
-            ListTile(
-              title: TextFormField(
-                initialValue: widget.initData.isbn,
-                decoration: InputDecoration(
-                  labelText: "ISBN Number",
+              // Card(
+              //   color: Colors.blue,
+              //   child:
+              Container(
+                color: Colors.blue,
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 20, top: 20),
+                  child: Column(
+                    children: [
+                      Text(
+                        "Book Info",
+                        style: TextStyle(fontSize: 22, color: Colors.white),
+                      ),
+                      Divider(
+                        color: Colors.white,
+                      ),
+                      ListTile(
+                        title: TextFormField(
+                            initialValue: widget.initData.title,
+                            cursorColor: Colors.white,
+                            style: TextStyle(color: Colors.white),
+                            decoration:
+                            blueBackgroundWhiteAccent("Title")),
+                      ),
+                      ListTile(
+                        title: TextFormField(
+                          initialValue: widget.initData.isbn,
+                          cursorColor: Colors.white,
+                          style: TextStyle(color: Colors.white),
+                          decoration: blueBackgroundWhiteAccent("ISBN #"),
+                        ),
+                      ),
+                      physicalFormatInput,
+                    ],
+                  ),
                 ),
               ),
-            ),
-            ListTile(
-              title: TextFormField(
-                initialValue: widget.initData.authors[0],
-              )
-            ),
-            physicalFormatInput,
-          ],
+              // ),
+              // Card(
+              //     child:
+              Padding(
+                  padding: EdgeInsets.only(top: 20, bottom: 20),
+                  child: Column(
+                    children: [
+                      Text("Publisher Info", style: TextStyle(fontSize: 22)),
+                      Divider(),
+                      ...widget.initData.publishers.map((Publisher publisher) =>
+                          _PublisherSelect(initPublisher: publisher)),
+                      IconButton(icon: Icon(Icons.add), onPressed: () async {
+                        var futurePublisher = await showDialog(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return AlertDialog(
+                                content: PaginationWidget(
+                                  futureGetter: getPublishersPagination,
+                                  onSelect: (Publisher newSelectedPublisher) {
+                                    print(newSelectedPublisher);
+                                    Navigator.of(context).pop(newSelectedPublisher);
+                                  },
+                                ),
+                              );
+                            });
+                        if (futurePublisher != null) {
+                          setState(() {
+                            widget.initData.publishers.add(futurePublisher);
+                          });
+                        }
+                      }),
+                      ListTile(
+                        title: TextFormField(
+                          initialValue: widget.initData.publishDate,
+                          decoration:
+                          InputDecoration(labelText: "Publish Date"),
+                        ),
+                      ),
+                    ],
+                  )),
+              // ),
+              Divider(
+                thickness: 2,
+              ),
+              ListTile(
+                  title: TextFormField(
+                    initialValue: widget.initData.authors[0],
+                  )),
+            ],
+          ),
         ));
   }
 }

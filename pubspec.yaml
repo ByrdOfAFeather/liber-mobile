@@ -23,7 +23,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
   sqflite:
   path:
   flutter_mobile_vision: ^0.1.4+1

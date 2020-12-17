@@ -71,7 +71,7 @@ Widget confirmBookDialog(
         Divider(),
         rowInfoList("Author(s)", book.authors),
         Divider(),
-        rowInfoList("Publisher(s)", book.publishers),
+        rowInfoList("Publisher(s)", book.publishers.map((pub)=>pub.name)),
         rowInfo("Publish Date", book.publishDate),
         Divider(),
         rowInfo("Format", book.format),
@@ -194,7 +194,7 @@ class _BarcodeScannerState extends State<BarcodeScanner> {
     }
   }
 
-  //
+
   Future<void> getISBNNumber(BuildContext context) {
     String isbnText = "";
     GlobalKey<FormState> _formKey = new GlobalKey<FormState>();
