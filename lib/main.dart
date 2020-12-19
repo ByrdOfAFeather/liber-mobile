@@ -10,11 +10,12 @@ class Liber extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Liber',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        brightness: Brightness.dark,
+        accentColor: Colors.lightBlueAccent
       ),
-      home: BarcodeScanner(),
+      home: HomeScreen(),
     );
   }
 }

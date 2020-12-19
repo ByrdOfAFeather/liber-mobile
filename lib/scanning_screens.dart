@@ -8,107 +8,27 @@ import 'package:liber/api.dart';
 import 'package:liber/local_database.dart';
 import 'package:liber/verify_book.dart';
 
-Widget rowInfo(String label, String value) {
-  return Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [Expanded(child: Text("$label: ")), Text(value)],
-  );
-}
+import 'add_book.dart';
 
-Widget rowInfoList(String label, List<String> values) {
-  return Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [
-      Expanded(child: Text("$label: ")),
-      Column(
-        children: [...values.map((String value) => Text(value))],
-      )
-    ],
-  );
-}
-
-Widget labeledIconButton(Icon icon, String labelText, Function onPressed) {
-  return Column(
-    children: [
-      IconButton(
-        icon: icon,
-        onPressed: onPressed,
-      ),
-      Text(labelText)
-    ],
-  );
-}
-
-Widget confirmDenyButtons(Function onCancel, Function onConfirm) {
-  return Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [
-      labeledIconButton(
-          Icon(Icons.cancel, color: Colors.red), "Cancel", onCancel),
-      labeledIconButton(
-          Icon(Icons.check, color: Colors.green), "Confirm", onConfirm)
-    ],
-  );
-}
-
-Widget confirmBookDialog(
-    BuildContext context, Book book, Function onCancel, Function onConfirm) {
-  return AlertDialog(
-    title: Text(
-      "Confirm Book",
-      textAlign: TextAlign.center,
-    ),
-    content: Column(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Image.network(
-          book.imageURL,
-          height: 150,
-        ),
-        Divider(),
-        rowInfo("Title", book.title),
-        Divider(),
-        rowInfoList("Author(s)", book.authors),
-        Divider(),
-        rowInfoList("Publisher(s)", book.publishers.map((pub)=>pub.name)),
-        rowInfo("Publish Date", book.publishDate),
-        Divider(),
-        rowInfo("Format", book.format),
-        Divider(),
-        confirmDenyButtons(onCancel, onConfirm)
-      ],
-    ),
-  );
-}
-
-errorFindingBook(BuildContext context) {
-  final snackBar = SnackBar(
-    content: Text("Couldn't find this book"),
-    duration: Duration(seconds: 3),
-  );
-  Scaffold.of(context).showSnackBar(snackBar);
-}
-
-class BarcodeScanner extends StatefulWidget {
+class HomeScreen extends StatefulWidget {
   @override
   State<StatefulWidget> createState() {
-    return _BarcodeScannerState();
+    return _HomeScreenState();
   }
 }
 
-class _BarcodeScannerState extends State<BarcodeScanner> {
-  String _scanBarcode = "";
+class _HomeScreenState extends State<HomeScreen> {
   bool dialVisible = true;
   Future<List<PreBookData>> _getPreBook = getPreBooks();
 
   SpeedDial buildSpeedDial(BuildContext context) {
     return SpeedDial(
+      backgroundColor: Colors.black,
+      foregroundColor: Colors.white,
       animatedIcon: AnimatedIcons.menu_close,
       animatedIconTheme: IconThemeData(size: 22.0),
-      // child: Icon(Icons.add),
-      onOpen: () => print('OPENING DIAL'),
-      onClose: () => print('DIAL CLOSED'),
+      onOpen: () => null,
+      onClose: () => null,
       visible: dialVisible,
       curve: Curves.bounceIn,
       children: [
@@ -116,7 +36,7 @@ class _BarcodeScannerState extends State<BarcodeScanner> {
           child: Icon(Icons.scanner, color: Colors.white),
           backgroundColor: Colors.deepOrange,
           onTap: () => scanBarcode(context),
-          label: 'Barcode Scanner',
+          label: 'Quick Scan',
           labelStyle:
           TextStyle(fontWeight: FontWeight.w500, color: Colors.white),
           labelBackgroundColor: Colors.deepOrangeAccent,
@@ -124,17 +44,26 @@ class _BarcodeScannerState extends State<BarcodeScanner> {
         SpeedDialChild(
           child: Icon(Icons.edit, color: Colors.white),
           backgroundColor: Colors.green,
-          onTap: () => print('SECOND CHILD'),
-          label: 'Manually Add Book',
+          onTap: () => {
+            showDialog(
+                context: context,
+                builder: (BuildContext context) {
+                  return AlertDialog(
+                    content: Column(
+                        mainAxisSize: MainAxisSize.min, children: [AddBook()]),
+                  );
+                })
+          },
+          label: 'Add Book',
           labelStyle:
           TextStyle(fontWeight: FontWeight.w500, color: Colors.white),
           labelBackgroundColor: Colors.green,
         ),
         SpeedDialChild(
-            child: Icon(Icons.input, color: Colors.white),
+            child: Icon(Icons.search, color: Colors.white),
             backgroundColor: Colors.blue,
-            onTap: () => getISBNNumber(context),
-            label: "Manually Input ISBN Number",
+            onTap: () => null,
+            label: "Search Library",
             labelStyle:
             TextStyle(fontWeight: FontWeight.w500, color: Colors.white),
             labelBackgroundColor: Colors.blue)
@@ -142,33 +71,10 @@ class _BarcodeScannerState extends State<BarcodeScanner> {
     );
   }
 
-  Future<void> searchBookByISBN(BuildContext context, String ISBN) async {
-    final snackBar = SnackBar(
-        content: Text("Looking for book..."), duration: Duration(seconds: 5));
-    Scaffold.of(context).showSnackBar(snackBar);
-    Book test = await searchOLByISBN(ISBN);
-    Scaffold.of(context).removeCurrentSnackBar();
-
-    if (test != null) {
-      Function onCancel = () => Navigator.of(context).pop();
-      Function onConfirm = () => {
-        Navigator.of(context).pop()
-        // TODO: What to do when the book is saved?
-      };
-      showDialog(
-          context: context,
-          builder: (BuildContext context) {
-            return confirmBookDialog(context, test, onCancel, onConfirm);
-          });
-    } else {
-      errorFindingBook(context);
-    }
-  }
-
   checkScanAndSave(scanRes) async {
     Book test = await searchOLByISBN(scanRes);
     if (test != null) {
-      await insertPreBook(PreBookData(test.title, test.imageURL, scanRes, 1));
+      await insertPreBook(PreBookData(test.name, test.imageURL, scanRes, 1));
     } else {
       await insertPreBook(PreBookData('UNK', 'UNK', 'UNK', 0));
     }
@@ -194,60 +100,6 @@ class _BarcodeScannerState extends State<BarcodeScanner> {
     }
   }
 
-
-  Future<void> getISBNNumber(BuildContext context) {
-    String isbnText = "";
-    GlobalKey<FormState> _formKey = new GlobalKey<FormState>();
-
-    Function onCancel = () => Navigator.of(context).pop();
-    Function onConfirm = () async {
-      if (_formKey.currentState.validate()) {
-        Navigator.pop(context);
-        await searchBookByISBN(context, isbnText);
-      }
-    };
-    showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            content: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text("ISBN Number",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 20)),
-                  Divider(),
-                  TextFormField(
-                    decoration: InputDecoration(
-                      hintText: "Do not enter dashes or spaces",
-                    ),
-                    validator: (String newText) {
-                      if (newText.length != 9 &&
-                          newText.length != 10 &&
-                          newText.length != 13) {
-                        return "Must be length 9, 10, or 13";
-                      } else if (newText.length == 13 &&
-                          (newText.substring(0, 3) != "978" &&
-                              newText.substring(0, 3) != "979")) {
-                        return "First 3 digits should be 978 or 979";
-                      } else {
-                        return null;
-                      }
-                    },
-                    onChanged: (String newText) {
-                      isbnText = newText;
-                    },
-                  ),
-                  confirmDenyButtons(onCancel, onConfirm)
-                ],
-              ),
-            ),
-          );
-        });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -270,16 +122,18 @@ class _BarcodeScannerState extends State<BarcodeScanner> {
                       Widget currentIcon = snapshot.data[index].found == 0
                           ? Icon(Icons.close, color: Colors.red)
                           : Icon(Icons.check, color: Colors.green);
+                      print(snapshot.data[index]);
                       return Card(
                           child: ListTile(
-                            title: Text(snapshot.data[index].title),
+                            title: Text(snapshot.data[index].name),
                             trailing: currentIcon,
                             onTap: () {
                               Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                       builder: (BuildContext context) => BookForm(
-                                          initializationData: snapshot.data[index])));
+                                          initializationData:
+                                          snapshot.data[index])));
                             },
                           ));
                     });

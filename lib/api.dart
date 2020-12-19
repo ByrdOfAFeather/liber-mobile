@@ -7,9 +7,13 @@ const String OPEN_LIB_API = "https://openlibrary.org";
 const String COVER_OPEN_LIB_API = "https://covers.openlibrary.org";
 const String LIBRARY_API = "http://192.168.1.236:8000/api";
 
-class Book {
+class NamedEntity {
+  String name;
+}
+
+class Book implements NamedEntity {
   int volume;
-  String title;
+  String name;
   String imageURL;
   String edition;
   String publishDate;
@@ -19,7 +23,7 @@ class Book {
   List<Publisher> publishers;
 
   Book.fromJson(Map<String, dynamic> json) {
-    title = json["title"];
+    name = json["title"];
     authors = json["authors"];
     publishDate = json["publishDate"];
     publishers = List<Publisher>.from((json["publishers"]));
@@ -29,7 +33,7 @@ class Book {
   }
 }
 
-class Publisher {
+class Publisher implements NamedEntity {
   String name;
   String id;
 
@@ -37,6 +41,22 @@ class Publisher {
     name = json["name"];
     id = json["id"]
         .toString(); // TODO: This probably can be removed later if uuid is used
+  }
+}
+
+class Work {
+  String title;
+  List<String> bookLinks;
+  String initialPublishDate;
+  List<String> authors;
+  List<String> publishers;
+
+  Work.fromJson(Map<String, dynamic> json) {
+    title = json["title"];
+    bookLinks = List<String>.from(json["bookLinks"]);
+    initialPublishDate = json["initialPublishDate"]?.toString();
+    authors = List<String>.from(json["authors"]);
+    publishers = List<String>.from(json["publishers"]);
   }
 }
 
@@ -62,7 +82,7 @@ Future<Map<String, dynamic>> getPublishersPagination(paginationIndex) async {
       print(e);
     }
     return {
-      "publishers": publishers,
+      "result": publishers,
       "end_of_pagination": jsonRes["end_of_pagination"]
     };
   } else {
@@ -162,7 +182,6 @@ Future<Book> searchOLByISBN(String ISBN) async {
     if (isbnRes.statusCode == 200) {
       Map<String, dynamic> jsonResponse = json.decode(isbnRes.body);
       List<String> authorsList;
-
       if (jsonResponse["author"] == null) {
         http.Response authorRes = await http.get(
             "$OPEN_LIB_API/api/books?bibkeys=ISBN:$ISBN&jscmd=data&format=json");
@@ -202,6 +221,46 @@ Future<Book> searchOLByISBN(String ISBN) async {
     } else {
       return null;
     }
+  }
+}
+
+Future<List<Work>> searchOLByName(String searchTerm, {String publisher}) async {
+  String searchQuery = "title=$searchTerm";
+  if (publisher != null) {
+    searchQuery = "$searchQuery&publisher=$publisher";
+  }
+  http.Response searchResult =
+  await http.get("$OPEN_LIB_API/search.json?$searchQuery");
+  if (searchResult.statusCode == 200) {
+    Map<String, dynamic> jsonResponse = json.decode(searchResult.body);
+    List<Work> works = [];
+    for (Map<String, dynamic> workRes in jsonResponse["docs"]) {
+      // TODO: note that books with the same name (particularly obscure ones)
+      // seem to confuse the system. There could be a way to work with this
+      // but unclear as to how.
+      Map<String, dynamic> parsedResponse = {};
+      workRes["title"] ??= "";
+      parsedResponse["title"] = workRes["title"];
+      workRes["seed"] ??= [];
+      parsedResponse["bookLinks"] =
+      List<String>.from(workRes["seed"].where((dynamic link) {
+        if ((link as String).startsWith("/books")) {
+          return true;
+        } else {
+          return false;
+        }
+      }).toList());
+      workRes["first_publish_year"] ??= "";
+      parsedResponse["initialPublishDate"] = workRes["first_publish_year"];
+      workRes["author_name"] ??= [];
+      parsedResponse["authors"] = workRes["author_name"];
+      workRes["publisher"] ??= [];
+      parsedResponse["publishers"] = workRes["publisher"];
+      works.add(Work.fromJson(parsedResponse));
+    }
+    return works;
+  } else {
+    return null;
   }
 }
 

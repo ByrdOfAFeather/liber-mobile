@@ -18,7 +18,7 @@ Function blueBackgroundWhiteAccent = (String labelText) => InputDecoration(
   ),
 );
 
-class PaginationWidget extends StatefulWidget {
+class PaginationWidget<T extends NamedEntity> extends StatefulWidget {
   // This can be used for authors or publishers or even
   // books when viewing from the author/publisher perspective
   final Function futureGetter;
@@ -29,11 +29,12 @@ class PaginationWidget extends StatefulWidget {
 
   @override
   State<StatefulWidget> createState() {
-    return _PaginationWidgetState();
+    return _PaginationWidgetState<T>();
   }
 }
 
-class _PaginationWidgetState extends State<PaginationWidget> {
+class _PaginationWidgetState<T extends NamedEntity>
+    extends State<PaginationWidget> {
   Future<Map<String, dynamic>> future;
   int paginationIndex = 0;
 
@@ -54,22 +55,44 @@ class _PaginationWidgetState extends State<PaginationWidget> {
             return Center(child: CircularProgressIndicator());
           } else {
             if (snapshot.hasData && snapshot.data != null) {
-              List<Publisher> pagination = snapshot.data["publishers"];
+              Widget downButton;
+              Widget upButton;
+              if (paginationIndex != 0) {
+                upButton = IconButton(
+                    icon: Icon(Icons.arrow_upward),
+                    onPressed: () {
+                      setState(() {
+                        if (paginationIndex == 0) {
+                          return;
+                        } else {
+                          paginationIndex -= 10;
+                          future = widget.futureGetter(paginationIndex);
+                        }
+                      });
+                    });
+              } else {
+                upButton = Container();
+              }
+
+              if (snapshot.data["end_of_pagination"] != true) {
+                downButton = IconButton(
+                    icon: Icon(Icons.arrow_downward),
+                    onPressed: () {
+                      setState(() {
+                        paginationIndex += 10;
+                        future = widget.futureGetter(paginationIndex);
+                      });
+                    });
+              } else {
+                downButton = Container();
+              }
+
+              List<T> pagination = snapshot.data["result"];
+
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                      icon: Icon(Icons.arrow_upward),
-                      onPressed: () {
-                        setState(() {
-                          if (paginationIndex == 0) {
-                            return;
-                          } else {
-                            paginationIndex -= 5;
-                            future = widget.futureGetter(paginationIndex);
-                          }
-                        });
-                      }),
+                  upButton,
                   Expanded(
                     child: ListView.builder(
                         shrinkWrap: true,
@@ -84,15 +107,7 @@ class _PaginationWidgetState extends State<PaginationWidget> {
                           );
                         }),
                   ),
-                  // TODO: This needs to disappear when pagination is complete
-                  IconButton(
-                      icon: Icon(Icons.arrow_downward),
-                      onPressed: () {
-                        setState(() {
-                          paginationIndex += 5;
-                          future = widget.futureGetter(paginationIndex);
-                        });
-                      }),
+                  downButton
                 ],
               );
             } else {
@@ -107,8 +122,10 @@ class _PaginationWidgetState extends State<PaginationWidget> {
 
 class _PublisherSelect extends StatefulWidget {
   final Publisher initPublisher;
+  final Function onDelete;
 
-  const _PublisherSelect({Key key, this.initPublisher}) : super(key: key);
+  const _PublisherSelect({Key key, this.initPublisher, this.onDelete})
+      : super(key: key);
 
   @override
   State<StatefulWidget> createState() {
@@ -134,12 +151,7 @@ class _PublisherSelectState extends State<_PublisherSelect> {
       child: ListTile(
         trailing: IconButton(
             icon: Icon(Icons.delete),
-            onPressed: () {
-              // TODO: Delete this publisher (this one is sort of hard I guess)
-              // setState(() {
-              //   // widget.initData.publishers.remove(value)
-              // });
-            }),
+            onPressed: () => widget.onDelete(selectedPublisher)),
         onTap: () async {
           var futurePublisher = await showDialog(
               context: context,
@@ -263,9 +275,6 @@ class _BookInfoForm extends State<BookInfoForm> {
                   );
                 }),
               ),
-              // Card(
-              //   color: Colors.blue,
-              //   child:
               Container(
                 color: Colors.blue,
                 child: Padding(
@@ -281,11 +290,10 @@ class _BookInfoForm extends State<BookInfoForm> {
                       ),
                       ListTile(
                         title: TextFormField(
-                            initialValue: widget.initData.title,
+                            initialValue: widget.initData.name,
                             cursorColor: Colors.white,
                             style: TextStyle(color: Colors.white),
-                            decoration:
-                            blueBackgroundWhiteAccent("Title")),
+                            decoration: blueBackgroundWhiteAccent("Title")),
                       ),
                       ListTile(
                         title: TextFormField(
@@ -300,37 +308,46 @@ class _BookInfoForm extends State<BookInfoForm> {
                   ),
                 ),
               ),
-              // ),
-              // Card(
-              //     child:
               Padding(
                   padding: EdgeInsets.only(top: 20, bottom: 20),
                   child: Column(
                     children: [
                       Text("Publisher Info", style: TextStyle(fontSize: 22)),
                       Divider(),
-                      ...widget.initData.publishers.map((Publisher publisher) =>
-                          _PublisherSelect(initPublisher: publisher)),
-                      IconButton(icon: Icon(Icons.add), onPressed: () async {
-                        var futurePublisher = await showDialog(
-                            context: context,
-                            builder: (BuildContext context) {
-                              return AlertDialog(
-                                content: PaginationWidget(
-                                  futureGetter: getPublishersPagination,
-                                  onSelect: (Publisher newSelectedPublisher) {
-                                    print(newSelectedPublisher);
-                                    Navigator.of(context).pop(newSelectedPublisher);
-                                  },
-                                ),
-                              );
-                            });
-                        if (futurePublisher != null) {
+                      ...widget.initData.publishers
+                          .map((Publisher publisher) => _PublisherSelect(
+                        initPublisher: publisher,
+                        onDelete: (Publisher toRemove) {
                           setState(() {
-                            widget.initData.publishers.add(futurePublisher);
+                            widget.initData.publishers.removeWhere(
+                                    (Publisher pub) =>
+                                pub.id == toRemove.id);
                           });
-                        }
-                      }),
+                        },
+                      )),
+                      IconButton(
+                          icon: Icon(Icons.add),
+                          onPressed: () async {
+                            var futurePublisher = await showDialog(
+                                context: context,
+                                builder: (BuildContext context) {
+                                  return AlertDialog(
+                                    content: PaginationWidget(
+                                      futureGetter: getPublishersPagination,
+                                      onSelect:
+                                          (Publisher newSelectedPublisher) {
+                                        Navigator.of(context)
+                                            .pop(newSelectedPublisher);
+                                      },
+                                    ),
+                                  );
+                                });
+                            if (futurePublisher != null) {
+                              setState(() {
+                                widget.initData.publishers.add(futurePublisher);
+                              });
+                            }
+                          }),
                       ListTile(
                         title: TextFormField(
                           initialValue: widget.initData.publishDate,
@@ -395,9 +412,6 @@ class _BookFormState extends State<BookForm> {
                   return BookInfoForm(initData: snapshot.data);
                 }
               } else {
-                print(snapshot);
-                print(snapshot.connectionState);
-                print(snapshot.data);
                 return Text("ERROR");
               }
             }),
