@@ -74,9 +74,10 @@ class _HomeScreenState extends State<HomeScreen> {
   checkScanAndSave(scanRes) async {
     Book test = await searchOLByISBN(scanRes);
     if (test != null) {
-      await insertPreBook(PreBookData(test.name, test.imageURL, scanRes, 1));
+      await insertPreBook(
+          PreBookData(test.name, test.imageURL, scanRes, test.olID, 1));
     } else {
-      await insertPreBook(PreBookData('UNK', 'UNK', 'UNK', 0));
+      await insertPreBook(PreBookData('UNK', 'UNK', 'UNK', 'UNK', 0));
     }
   }
 
@@ -104,41 +105,48 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
         body: Builder(
-          builder: (BuildContext context) => FutureBuilder(
-            future: _getPreBook,
-            builder: (BuildContext context, AsyncSnapshot snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [CircularProgressIndicator()]);
-              } else if (snapshot.data.isEmpty &&
-                  snapshot.connectionState == ConnectionState.done) {
-                return Text(
-                    "Okay well there isn't anything here"); // TODO: Change
-              } else {
-                return ListView.builder(
-                    itemCount: snapshot.data.length,
-                    itemBuilder: (BuildContext context, int index) {
-                      Widget currentIcon = snapshot.data[index].found == 0
-                          ? Icon(Icons.close, color: Colors.red)
-                          : Icon(Icons.check, color: Colors.green);
-                      print(snapshot.data[index]);
-                      return Card(
-                          child: ListTile(
-                            title: Text(snapshot.data[index].name),
-                            trailing: currentIcon,
-                            onTap: () {
-                              Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (BuildContext context) => BookForm(
-                                          initializationData:
-                                          snapshot.data[index])));
-                            },
-                          ));
-                    });
-              }
+          builder: (BuildContext context) => RefreshIndicator(
+            onRefresh: () async {
+              setState(() {
+                _getPreBook = getPreBooks();
+              });
             },
+            child: FutureBuilder(
+              future: _getPreBook,
+              builder: (BuildContext context, AsyncSnapshot snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [CircularProgressIndicator()]);
+                } else if (snapshot.data.isEmpty &&
+                    snapshot.connectionState == ConnectionState.done) {
+                  return Text(
+                      "Okay well there isn't anything here"); // TODO: Change
+                } else {
+                  return ListView.builder(
+                      itemCount: snapshot.data.length,
+                      itemBuilder: (BuildContext context, int index) {
+                        Widget currentIcon = snapshot.data[index].found == 0
+                            ? Icon(Icons.close, color: Colors.red)
+                            : Icon(Icons.check, color: Colors.green);
+                        print(snapshot.data[index]);
+                        return Card(
+                            child: ListTile(
+                              title: Text(snapshot.data[index].name),
+                              trailing: currentIcon,
+                              onTap: () {
+                                Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (BuildContext context) => BookForm(
+                                            initializationData:
+                                            snapshot.data[index])));
+                              },
+                            ));
+                      });
+                }
+              },
+            ),
           ),
         ),
         floatingActionButton: Builder(

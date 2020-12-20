@@ -5,8 +5,8 @@ import 'api.dart';
 import 'local_database.dart';
 
 String forceSmallString(String val) {
-  if (val.length >= 20) {
-    return "${val.substring(0, 20)}...";
+  if (val.length >= 15) {
+    return "${val.substring(0, 12)}...";
   } else {
     return val;
   }
@@ -39,7 +39,7 @@ class _FutureListView<T> extends State<FutureListView> {
     Widget errorWidget = Center(
         child: Column(
           children: [
-            Text("Unknown Error Occured"),
+            Text("Unknown Error Occurred"),
             RaisedButton(
               onPressed: () {
                 Navigator.of(context).pop();
@@ -57,18 +57,77 @@ class _FutureListView<T> extends State<FutureListView> {
         } else {
           if (snapshot.hasError) {
             return errorWidget;
+          } else if (snapshot.data == null &&
+              snapshot.connectionState == ConnectionState.none) {
+            return Container(); // This is the case where nothing has loaded yet
           } else if (snapshot.data != null) {
-            return ListView.builder(
-              itemCount: snapshot.data.length,
-              itemBuilder: (BuildContext context, int index) {
-                return widget.tileBuilder(context, snapshot.data[index]);
-              },
+            return Container(
+              width: double.maxFinite,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: snapshot.data.length,
+                itemBuilder: (BuildContext context, int index) {
+                  return widget.tileBuilder(context, snapshot.data[index]);
+                },
+              ),
             );
           } else {
             return errorWidget;
           }
         }
       },
+    );
+  }
+}
+
+class SelectBookFromWork extends StatefulWidget {
+  final Work selectedWork;
+
+  const SelectBookFromWork({Key key, this.selectedWork}) : super(key: key);
+
+  @override
+  State<StatefulWidget> createState() {
+    return _SelectBookFromWorkState();
+  }
+}
+
+class _SelectBookFromWorkState extends State<SelectBookFromWork> {
+  Future<List<Book>> associatedBooks;
+
+  @override
+  Widget build(BuildContext context) {
+    Function tileBuilder = (BuildContext context, Book data) {
+      return Card(
+        child: ListTile(
+          title: Column(
+            children: [
+              rowInfo("Title", data.name),
+              rowInfoList(
+                  "Publishers", data.publishers.map((e) => e.name).toList()),
+              rowInfo("Date", data.publishDate)
+            ],
+          ),
+          onTap: () {
+            Function onConfirm = () {
+              Navigator.pop(context, data);
+            };
+            showDialog(
+                context: context,
+                builder: (BuildContext context) {
+                  return confirmBookDialog(context, data, onConfirm);
+                }).then((value) {
+              if (value == null) {
+                return;
+              }
+              Navigator.pop(context, value);
+            });
+          },
+        ),
+      );
+    };
+    return FutureListView<List<Book>>(
+      futureGetter: () => getBooksFromWork(widget.selectedWork),
+      tileBuilder: tileBuilder,
     );
   }
 }
@@ -97,7 +156,7 @@ Widget rowInfoList(String label, List<String> values) {
       Column(
         children: [
           ...values.map((String value) {
-              value = forceSmallString(value);
+            value = forceSmallString(value);
             return Text(value);
           })
         ],
@@ -107,6 +166,11 @@ Widget rowInfoList(String label, List<String> values) {
 }
 
 Widget confirmBookDialog(BuildContext context, Book book, Function onConfirm) {
+  Widget bookImage = Container();
+  if (book.imageURL != null) {
+    bookImage = Image.network(book.imageURL, height: 150);
+  }
+
   return AlertDialog(
     title: Text(
       "Confirm Book",
@@ -117,10 +181,7 @@ Widget confirmBookDialog(BuildContext context, Book book, Function onConfirm) {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Image.network(
-            book.imageURL,
-            height: 150,
-          ),
+          bookImage,
           Divider(),
           rowInfo("Title", book.name),
           Divider(),
@@ -229,10 +290,14 @@ class _SearchBookState extends State<SearchBook> {
               child: FutureBuilder(
                 future: bookSearchResult,
                 builder: (BuildContext context, AsyncSnapshot snapshot) {
-                  if (snapshot.connectionState != ConnectionState.done) {
+                  if (snapshot.connectionState != ConnectionState.done &&
+                      snapshot.connectionState != ConnectionState.none) {
                     return Center(child: CircularProgressIndicator());
                   } else {
-                    if (snapshot.data == null) {
+                    if (snapshot.data == null &&
+                        snapshot.connectionState == ConnectionState.none) {
+                      return Container();
+                    } else if (snapshot.data == null) {
                       return Center(child: Text("No results found"));
                     } else {
                       return Container(
@@ -241,12 +306,29 @@ class _SearchBookState extends State<SearchBook> {
                             shrinkWrap: true,
                             itemCount: snapshot.data.length,
                             itemBuilder: (BuildContext context, int index) {
-                              print(snapshot.data[index]);
                               return Card(
                                   child: ListTile(
                                     title: Text(
                                         "${snapshot.data[index].title}, ${snapshot.data[index].initialPublishDate}"),
-                                    onTap: () {},
+                                    onTap: () {
+                                      showDialog(
+                                          context: context,
+                                          builder: (BuildContext context) {
+                                            return AlertDialog(
+                                              content: SelectBookFromWork(
+                                                  selectedWork:
+                                                  snapshot.data[index] as Work),
+                                            );
+                                          }).then((value) async {
+                                        if (value == null) {
+                                          return;
+                                        }
+                                        Book val = value as Book;
+                                        Navigator.of(context).pop();
+                                        await insertPreBook(PreBookData(val.name,
+                                            val.imageURL, val.isbn, val.olID, 1));
+                                      });
+                                    },
                                   ));
                             }),
                       );
@@ -301,8 +383,8 @@ class _GetISBNNumberState extends State<GetISBNNumber> {
               builder: (BuildContext context) {
                 Function onConfirm = () async {
                   Navigator.of(context).pop();
-                  await insertPreBook(
-                      PreBookData(bookRes.name, bookRes.imageURL, isbnText, 1));
+                  await insertPreBook(PreBookData(bookRes.name,
+                      bookRes.imageURL, isbnText, bookRes.olID, 1));
                 };
                 return confirmBookDialog(context, bookRes, onConfirm);
               });

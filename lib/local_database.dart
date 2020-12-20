@@ -8,12 +8,13 @@ class PreBookData {
   final String name;
   final String url;
   final String ISBN;
+  final String olID;
   final int found;
 
-  PreBookData(this.name, this.url, this.ISBN, this.found);
+  PreBookData(this.name, this.url, this.ISBN, this.olID, this.found);
 
   Map<String, dynamic> toMap() {
-    return {"name": name, "url": url, "isbn": ISBN, "found": found};
+    return {"name": name, "url": url, "isbn": ISBN, "olID": olID, "found": found};
   }
 }
 
@@ -23,7 +24,7 @@ Future<Database> getOrCreateDatabaseFactory() async {
       join(await getDatabasesPath(), 'prebook_database.db'),
       onCreate: (db, version) async {
         await db.execute(
-          "CREATE TABLE prebooks(id INTEGER PRIMARY KEY, name TEXT, url TEXT, isbn TEXT, found INTEGER)",
+          "CREATE TABLE prebooks(id INTEGER PRIMARY KEY, name TEXT, url TEXT, isbn TEXT, olID TEXT, found INTEGER)",
         );
       },
       version: 1,
@@ -52,6 +53,7 @@ Future<List<PreBookData>> getPreBooks() async {
       maps[i]["name"],
       maps[i]["url"],
       maps[i]["isbn"],
+      maps[i]["olID"],
       maps[i]["found"]
     );
   });

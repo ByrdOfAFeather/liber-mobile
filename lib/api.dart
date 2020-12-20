@@ -19,6 +19,7 @@ class Book implements NamedEntity {
   String publishDate;
   String format;
   String isbn;
+  String olID;
   List<String> authors;
   List<Publisher> publishers;
 
@@ -30,6 +31,7 @@ class Book implements NamedEntity {
     imageURL = json["imageURL"];
     format = json["physicalFormat"];
     isbn = json["isbn"];
+    olID = json["olID"];
   }
 }
 
@@ -168,6 +170,74 @@ Future<List<Publisher>> getOrCreatePublishers(
   return publishers;
 }
 
+Future<Book> parseBook(http.Response res) async {
+  Map<String, dynamic> jsonResponse = json.decode(res.body);
+  List<String> authorsList;
+  String openLibID =
+  (jsonResponse["key"] as String).replaceAll(RegExp("/books/"), "");
+  if (jsonResponse["author"] == null) {
+    http.Response authorRes = await http.get(
+        "$OPEN_LIB_API/api/books?bibkeys=OLID:$openLibID&jscmd=data&format=json");
+    if (authorRes.statusCode == 200) {
+      List<dynamic> authorsDicts =
+      json.decode(authorRes.body)["OLID:$openLibID"]["authors"]
+      as List<dynamic>;
+      authorsList = await parseAuthors(authorsDicts);
+    } else {
+      // TODO: This is the error case where there was not authors
+      // in the book in the first place but then we had an error when
+      // trying the alternate api
+    }
+  } else {
+    // Authors are returned in the form of a list of links to the author
+    // pages. Thus, we have to loop and get each author.
+    List<dynamic> authorsDicts = jsonResponse["authors"] as List<dynamic>;
+    authorsList = await parseAuthors(authorsDicts);
+  }
+
+  if (jsonResponse["publishers"] == null) {
+    jsonResponse["publishers"] = [];
+  } else {
+    jsonResponse["publishers"] = await getOrCreatePublishers(
+        List<String>.from(jsonResponse["publishers"]));
+  }
+
+  // Sets isbn_13 to isbn_10 if no isbn_13 is present
+  // If isbn_10 isn't present we provide a placeholder list
+  jsonResponse["isbn_13"] ??= jsonResponse["isbn_10"];
+  jsonResponse["isbn_13"] ??= [""];
+
+  String imageURL;
+  if (jsonResponse["covers"] != null) {
+    imageURL = "$COVER_OPEN_LIB_API/b/id/${jsonResponse["covers"][0]}.jpg";
+  }
+
+  print("VIEW ME FOR FORMAT");
+  print(jsonResponse["physical_format"]);
+
+  Map<String, dynamic> bookInfo = {
+    "title": jsonResponse["title"],
+    "authors": authorsList,
+    "publishDate": jsonResponse["publish_date"],
+    "publishers": jsonResponse["publishers"],
+    "imageURL": imageURL,
+    "physicalFormat": jsonResponse["physical_format"],
+    "isbn": jsonResponse["isbn_13"][0], // TODO: It is strange that this is a list in the first place.....
+    "olID": openLibID
+  };
+  return Book.fromJson(bookInfo);
+}
+
+Future<Book> searchOLByOLID(String olID) async{
+  http.Response book = await http.get("$OPEN_LIB_API/books/$olID.json");
+  if (book.statusCode == 200) {
+    return await parseBook(book);
+  } else {
+    return null;
+  }
+}
+
+
 Future<Book> searchOLByISBN(String ISBN) async {
   if (ISBN.length > 13 || ISBN.length < 9) {
     return null;
@@ -180,44 +250,8 @@ Future<Book> searchOLByISBN(String ISBN) async {
     // Initial query to get the book information
     http.Response isbnRes = await http.get("$OPEN_LIB_API/isbn/$ISBN.json");
     if (isbnRes.statusCode == 200) {
-      Map<String, dynamic> jsonResponse = json.decode(isbnRes.body);
-      List<String> authorsList;
-      if (jsonResponse["author"] == null) {
-        http.Response authorRes = await http.get(
-            "$OPEN_LIB_API/api/books?bibkeys=ISBN:$ISBN&jscmd=data&format=json");
-        if (authorRes.statusCode == 200) {
-          List<dynamic> authorsDicts = json.decode(authorRes.body)["ISBN:$ISBN"]
-          ["authors"] as List<dynamic>;
-          authorsList = await parseAuthors(authorsDicts);
-        } else {
-          // TODO: This is the error case where there was not authors
-          // in the book in the first place but then we had an error when
-          // trying the alternate api
-        }
-      } else {
-        // Authors are returned in the form of a list of links to the author
-        // pages. Thus, we have to loop and get each author.
-        List<dynamic> authorsDicts = jsonResponse["authors"] as List<dynamic>;
-        authorsList = await parseAuthors(authorsDicts);
-      }
-
-      if (jsonResponse["publishers"] == null) {
-        jsonResponse["publishers"] = [];
-      } else {
-        jsonResponse["publishers"] = await getOrCreatePublishers(
-            List<String>.from(jsonResponse["publishers"]));
-      }
-
-      Map<String, dynamic> bookInfo = {
-        "title": jsonResponse["title"],
-        "authors": authorsList,
-        "publishDate": jsonResponse["publish_date"],
-        "publishers": jsonResponse["publishers"],
-        "imageURL": "$COVER_OPEN_LIB_API/b/isbn/$ISBN.jpg",
-        "physicalFormat": jsonResponse["physical_format"],
-        "isbn": ISBN
-      };
-      return Book.fromJson(bookInfo);
+      Book book = await parseBook(isbnRes);
+      return book;
     } else {
       return null;
     }
@@ -262,6 +296,20 @@ Future<List<Work>> searchOLByName(String searchTerm, {String publisher}) async {
   } else {
     return null;
   }
+}
+
+Future<List<Book>> getBooksFromWork(Work work) async {
+  List<Book> books = [];
+  for (String bookURL in work.bookLinks) {
+    http.Response bookRes = await http.get("$OPEN_LIB_API$bookURL.json");
+    if (bookRes.statusCode == 200) {
+      Book curBook = await parseBook(bookRes);
+      books.add(curBook);
+    } else {
+      // TODO: Not sure how to handle this particular error
+    }
+  }
+  return books;
 }
 
 Future<List<Book>> searchBooks(String term) {

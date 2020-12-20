@@ -180,6 +180,54 @@ class _PublisherSelectState extends State<_PublisherSelect> {
   }
 }
 
+class _FormatSelector extends StatefulWidget {
+  @override
+  State<StatefulWidget> createState() {
+    return _FormatSelectorState();
+  }
+}
+
+enum PhysicalFormats {
+  Hardcover,
+  Paperback,
+  MassMarketPaperBack,
+  LibraryBinding,
+  SpiralBinding,
+  AudioBookUnabridged,
+  AudioBookAbridged
+}
+
+const Map<PhysicalFormats, String> physicalFormatToString = {
+  PhysicalFormats.Hardcover: "Hardcover",
+  PhysicalFormats.Paperback: "Paperback",
+  PhysicalFormats.MassMarketPaperBack: "Mass-Market Paperback",
+  PhysicalFormats.LibraryBinding: "Library Binding",
+  PhysicalFormats.SpiralBinding: "Spiral Binding",
+  // TODO: Perhaps at some point audio books are important, not now
+};
+
+class _FormatSelectorState extends State<_FormatSelector> {
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text("Select Format"),
+      content: Column(
+        children: [
+          ...physicalFormatToString.keys.map((e) {
+            return Card(
+                child: ListTile(
+                  title: Text(physicalFormatToString[e]),
+                  onTap: () {
+                    Navigator.pop(context, e);
+                  },
+                ));
+          }).toList()
+        ],
+      ),
+    );
+  }
+}
+
 class BookInfoForm extends StatefulWidget {
   final Book initData;
 
@@ -192,67 +240,57 @@ class BookInfoForm extends StatefulWidget {
 }
 
 class _BookInfoForm extends State<BookInfoForm> {
-  bool _isSoftback = false;
-  bool _isHardback = false;
   List<Publisher> selectedPublishers;
   GlobalKey<FormState> _formKey = new GlobalKey<FormState>();
 
   @override
   void initState() {
     selectedPublishers = widget.initData?.publishers;
-    _isSoftback = widget.initData?.format == "softback";
-    _isHardback = widget.initData?.format == "hardback";
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
     if (widget.initData == null) {
-      print("Oops I got here");
-      return Text("Bruh");
+      return Text("The data is null");
     }
 
     Widget physicalFormatInput;
-    if (widget.initData.format != null) {
-      physicalFormatInput = Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          ChoiceChip(
-            label: Text("Hardback"),
-            labelStyle: TextStyle(color: Colors.white),
-            selected: _isHardback,
-            onSelected: (bool newInput) => {
-              setState(() {
-                _isHardback = !_isHardback;
-                if (_isSoftback) {
-                  _isSoftback = !_isSoftback;
-                }
-              })
-            },
-            selectedColor: Colors.green,
-            backgroundColor: Colors.red,
-          ),
-          Text("Or", style: TextStyle(color: Colors.white)),
-          ChoiceChip(
-            label: Text("Softback"),
-            labelStyle: TextStyle(color: Colors.white),
-            selected: _isSoftback,
-            onSelected: (bool newInput) => {
-              setState(() {
-                _isSoftback = !_isSoftback;
-                if (_isHardback) {
-                  _isHardback = !_isHardback;
-                }
-                print(_isSoftback);
-              })
-            },
-            selectedColor: Colors.green,
-            backgroundColor: Colors.red,
-          )
-        ],
+    widget.initData.format ??= "Select Format";
+    physicalFormatInput = Card(
+      child: ListTile(
+          title: Text(widget.initData.format),
+          onTap: () {
+            showDialog(
+                context: context,
+                builder: (BuildContext context) => _FormatSelector())
+                .then((value) {
+              if (value != null) {
+                setState(() {
+                  widget.initData.format = physicalFormatToString[value];
+                });
+              }
+            });
+          }),
+    );
+
+    Widget bookCover = Container();
+    if (widget.initData.imageURL != null) {
+      bookCover = Center(
+        child: Image.network(widget.initData.imageURL, frameBuilder:
+            (BuildContext context, Widget child, int frame,
+            bool wasSyncLoaded) {
+          if (wasSyncLoaded) {
+            return child;
+          }
+          return AnimatedOpacity(
+            child: child,
+            opacity: frame == null ? 0 : 1,
+            duration: const Duration(seconds: 1),
+            curve: Curves.easeOut,
+          );
+        }),
       );
-    } else {
-      physicalFormatInput = Container();
     }
 
     return Form(
@@ -260,21 +298,7 @@ class _BookInfoForm extends State<BookInfoForm> {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              Center(
-                child: Image.network(widget.initData.imageURL, frameBuilder:
-                    (BuildContext context, Widget child, int frame,
-                    bool wasSyncLoaded) {
-                  if (wasSyncLoaded) {
-                    return child;
-                  }
-                  return AnimatedOpacity(
-                    child: child,
-                    opacity: frame == null ? 0 : 1,
-                    duration: const Duration(seconds: 1),
-                    curve: Curves.easeOut,
-                  );
-                }),
-              ),
+              bookCover,
               Container(
                 color: Colors.blue,
                 child: Padding(
@@ -388,7 +412,7 @@ class _BookFormState extends State<BookForm> {
   @override
   void initState() {
     if (widget.initializationData.found == 1) {
-      bookData = searchOLByISBN(widget.initializationData.ISBN);
+      bookData = searchOLByOLID(widget.initializationData.olID);
     }
     super.initState();
   }
