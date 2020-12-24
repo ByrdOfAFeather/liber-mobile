@@ -185,7 +185,7 @@ Widget confirmBookDialog(BuildContext context, Book book, Function onConfirm) {
           Divider(),
           rowInfo("Title", book.name),
           Divider(),
-          rowInfoList("Author(s)", book.authors),
+          rowInfoList("Author(s)", book.authors.map((auth)=>auth.name).toList()),
           Divider(),
           rowInfoList(
               "Publisher(s)", book.publishers.map((pub) => pub.name).toList()),

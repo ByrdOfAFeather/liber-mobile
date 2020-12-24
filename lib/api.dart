@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 const String OPEN_LIB_API = "https://openlibrary.org";
 const String COVER_OPEN_LIB_API = "https://covers.openlibrary.org";
+// const String LIBRARY_API = "https://liber-pl.herokuapp.com/api";
 const String LIBRARY_API = "http://192.168.1.236:8000/api";
 
 class NamedEntity {
@@ -20,14 +21,14 @@ class Book implements NamedEntity {
   String format;
   String isbn;
   String olID;
-  List<String> authors;
-  List<Publisher> publishers;
+  List<Author> authors;
+  List<IDEntity> publishers;
 
   Book.fromJson(Map<String, dynamic> json) {
     name = json["title"];
     authors = json["authors"];
     publishDate = json["publishDate"];
-    publishers = List<Publisher>.from((json["publishers"]));
+    publishers = List<IDEntity>.from((json["publishers"]));
     imageURL = json["imageURL"];
     format = json["physicalFormat"];
     isbn = json["isbn"];
@@ -35,14 +36,30 @@ class Book implements NamedEntity {
   }
 }
 
-class Publisher implements NamedEntity {
+enum IDEntityType { publisher, author }
+
+class IDEntity implements NamedEntity {
   String name;
   String id;
 
-  Publisher.fromJson(Map<String, dynamic> json) {
+  IDEntity.fromJson(Map<String, dynamic> json) {
     name = json["name"];
-    id = json["id"]
-        .toString(); // TODO: This probably can be removed later if uuid is used
+    id = json["id"].toString(); // TODO: This probably can be removed later if uuid is used
+  }
+}
+
+class Author implements NamedEntity {
+  String name;
+  String olID;
+
+  Author.fromJson(Map<String, dynamic> json) {
+    name = json["name"];
+    olID = json["olID"];
+  }
+
+  Author.unknown() {
+    name = "Unknown";
+    olID = "";
   }
 }
 
@@ -70,29 +87,32 @@ Future<bool> addBook() async {
   return null;
 }
 
-Future<Map<String, dynamic>> getPublishersPagination(paginationIndex) async {
-  http.Response libRes = await http
-      .get("$LIBRARY_API/publisher?pagination_index=$paginationIndex");
+Future<Map<String, dynamic>> getIDEntityPagination(int paginationIndex, IDEntityType paginationType) async {
+  http.Response libRes = await http.get("$LIBRARY_API/$paginationType?pagination_index=$paginationIndex");
   if (libRes.statusCode == 200) {
     Map<String, dynamic> jsonRes = json.decode(libRes.body);
-    List<Publisher> publishers;
+    List<IDEntity> entities;
     try {
-      publishers = List<Publisher>.from(jsonRes["result"]
-          .map((publisherInfo) => Publisher.fromJson(publisherInfo))
-          .toList());
+      entities =
+      List<IDEntity>.from(jsonRes["result"].map((publisherInfo) => IDEntity.fromJson(publisherInfo)).toList());
     } catch (e) {
       print(e);
     }
-    return {
-      "result": publishers,
-      "end_of_pagination": jsonRes["end_of_pagination"]
-    };
+    return {"result": entities, "end_of_pagination": jsonRes["end_of_pagination"]};
   } else {
     return null;
   }
 }
 
-Future<List<String>> parseAuthors(List<dynamic> potentialAuthors) async {
+Future<Map<String, dynamic>> getPublishersPagination(int paginationIndex) async {
+  return await getIDEntityPagination(paginationIndex, IDEntityType.publisher);
+}
+
+Future<Map<String, dynamic>> getAuthorsPagination(int paginationIndex) async {
+  return await getIDEntityPagination(paginationIndex, IDEntityType.author);
+}
+
+Future<List<Author>> parseAuthors(List<dynamic> potentialAuthors) async {
   /*
    * There's two cases for the author. Both are lists of dictionaries.
    * If the request is coming from the /api endpoint, there will be name/url
@@ -101,87 +121,114 @@ Future<List<String>> parseAuthors(List<dynamic> potentialAuthors) async {
    */
 
   if (potentialAuthors == null) {
-    return ["Unknown"];
+    return [Author.unknown()];
   }
-  List<String> returnList = [];
+  List<Author> returnList = [];
   if (potentialAuthors.isNotEmpty) {
     for (dynamic authorDict in potentialAuthors) {
       String author = authorDict["name"];
       if (author == null) {
         String authorLink = authorDict["key"];
         if (authorLink == null) {
-          authorLink = "${authorDict['url']}.json";
+          authorLink = "$OPEN_LIB_API/${authorDict['url']}.json";
         } else {
-          authorLink = "$OPEN_LIB_API/$authorLink.json";
+          authorLink = "$OPEN_LIB_API$authorLink.json";
         }
 
-        http.Response authorRes =
-        await http.get("$OPEN_LIB_API/$authorLink.json");
+        http.Response authorRes = await http.get("$authorLink");
 
         if (authorRes.statusCode != 200) {
           // This is a very bad position to be in. We will have to define
           // the author as unknown.
           // TODO: Perhaps a little more can be done in this case
-          returnList.add("Unknown");
+          // returnList.add(Author.fromJson(authorRes ));
+          print("here");
         } else {
           Map<String, dynamic> authorJsonResponse = json.decode(authorRes.body);
-          returnList.add(authorJsonResponse["name"]);
+          String name = authorJsonResponse["name"];
+          RegExpMatch olIDMatch = RegExp("\/OL.*\\.").firstMatch(authorLink);
+          String olID = authorLink.substring(olIDMatch.start + 1, olIDMatch.end - 1);
+          Map<String, dynamic> authorInfo = {"name": name, "olID": olID};
+          returnList.add(Author.fromJson(authorInfo));
         }
       } else {
-        returnList.add(author);
+        RegExpMatch regularExpression = RegExp("OL.*\/").firstMatch(authorDict["url"]);
+        String olID = authorDict["url"].substring(regularExpression.start, regularExpression.end - 1);
+        Map<String, dynamic> authorInfo = {"name": author, "olID": olID};
+        returnList.add(Author.fromJson(authorInfo));
       }
     }
   } else {
-    returnList.add("Unknown");
+    // returnList.add("Unknown");
   }
   return returnList;
 }
 
-Future<List<Publisher>> getOrCreatePublishers(
-    List<String> publisherNames) async {
+Future<IDEntity> getOrCreateIDEntity(String entityName, IDEntityType entityType) async {
+  String entitySafe = entityType.toString().replaceAll(RegExp("IDEntityType."), "");
+  http.Response entityRes = await http.get("$LIBRARY_API/$entitySafe?name=$entityName");
+  if (entityRes.statusCode == 200) {
+    return IDEntity.fromJson(json.decode(entityRes.body));
+  } else if (entityRes.statusCode == 404) {
+    http.Response publisherCreateRes = await http.post("$LIBRARY_API/$entitySafe",
+        body: json.encode(
+          {"name": entityName},
+        ),
+        headers: {"content-type": "application/json"});
+    if (publisherCreateRes.statusCode == 200) {
+      return IDEntity.fromJson(json.decode(publisherCreateRes.body));
+    } else {
+      print("Hey I couldn't add $entityName");
+      // publishers.add(null); // TODO: Handle this downstream
+      return null;
+    }
+  } else {
+    print("Hey I couldn't find or add $entityName");
+    // publishers.add(null); // TODO: Again handle this downstream
+    return null;
+  }
+}
+
+Future<List<IDEntity>> getOrCreatePublishers(List<String> publisherNames) async {
   if (publisherNames == null) {
     return [];
   }
-  List<Publisher> publishers = [];
+  List<IDEntity> publishers = [];
   for (String publisher in publisherNames) {
-    http.Response publisherInfo =
-    await http.get("$LIBRARY_API/publisher?name=$publisher");
-    if (publisherInfo.statusCode == 200) {
-      publishers.add(Publisher.fromJson(json.decode(publisherInfo.body)));
-    } else if (publisherInfo.statusCode == 404) {
-      http.Response publisherCreateRes =
-      await http.post("$LIBRARY_API/publisher",
-          body: json.encode(
-            {"name": publisher},
-          ),
-          headers: {"content-type": "application/json"});
-      if (publisherCreateRes.statusCode == 200) {
-        publishers
-            .add(Publisher.fromJson(json.decode(publisherCreateRes.body)));
-      } else {
-        print("Hey I couldn't add $publisher");
-        // publishers.add(null); // TODO: Handle this downstream
-      }
+    IDEntity currentPub = await getOrCreateIDEntity(publisher, IDEntityType.publisher);
+    if (currentPub != null) {
+      publishers.add(currentPub);
     } else {
-      print("Hey I couldn't find or add $publisher");
-      // publishers.add(null); // TODO: Again handle this downstream
+      // TODO: Here
     }
   }
   return publishers;
 }
 
+Future<List<IDEntity>> getOrCreateAuthors(List<String> authorNames) async {
+  List<IDEntity> authors = [];
+  if (authorNames == null) {
+    return [];
+  }
+  for (String author in authorNames) {
+    IDEntity currentAuthor = await getOrCreateIDEntity(author, IDEntityType.author);
+    if (currentAuthor != null) {
+      authors.add(currentAuthor);
+    } else {
+      // TODO: here
+    }
+  }
+  return authors;
+}
+
 Future<Book> parseBook(http.Response res) async {
   Map<String, dynamic> jsonResponse = json.decode(res.body);
-  List<String> authorsList;
-  String openLibID =
-  (jsonResponse["key"] as String).replaceAll(RegExp("/books/"), "");
-  if (jsonResponse["author"] == null) {
-    http.Response authorRes = await http.get(
-        "$OPEN_LIB_API/api/books?bibkeys=OLID:$openLibID&jscmd=data&format=json");
+  List<Author> authorsList;
+  String openLibID = (jsonResponse["key"] as String).replaceAll(RegExp("/books/"), "");
+  if (jsonResponse["authors"] == null) {
+    http.Response authorRes = await http.get("$OPEN_LIB_API/api/books?bibkeys=OLID:$openLibID&jscmd=data&format=json");
     if (authorRes.statusCode == 200) {
-      List<dynamic> authorsDicts =
-      json.decode(authorRes.body)["OLID:$openLibID"]["authors"]
-      as List<dynamic>;
+      List<dynamic> authorsDicts = json.decode(authorRes.body)["OLID:$openLibID"]["authors"] as List<dynamic>;
       authorsList = await parseAuthors(authorsDicts);
     } else {
       // TODO: This is the error case where there was not authors
@@ -198,8 +245,7 @@ Future<Book> parseBook(http.Response res) async {
   if (jsonResponse["publishers"] == null) {
     jsonResponse["publishers"] = [];
   } else {
-    jsonResponse["publishers"] = await getOrCreatePublishers(
-        List<String>.from(jsonResponse["publishers"]));
+    jsonResponse["publishers"] = await getOrCreatePublishers(List<String>.from(jsonResponse["publishers"]));
   }
 
   // Sets isbn_13 to isbn_10 if no isbn_13 is present
@@ -222,13 +268,14 @@ Future<Book> parseBook(http.Response res) async {
     "publishers": jsonResponse["publishers"],
     "imageURL": imageURL,
     "physicalFormat": jsonResponse["physical_format"],
-    "isbn": jsonResponse["isbn_13"][0], // TODO: It is strange that this is a list in the first place.....
+    "isbn": jsonResponse["isbn_13"][0],
+    // TODO: It is strange that this is a list in the first place.....
     "olID": openLibID
   };
   return Book.fromJson(bookInfo);
 }
 
-Future<Book> searchOLByOLID(String olID) async{
+Future<Book> searchOLByOLID(String olID) async {
   http.Response book = await http.get("$OPEN_LIB_API/books/$olID.json");
   if (book.statusCode == 200) {
     return await parseBook(book);
@@ -236,7 +283,6 @@ Future<Book> searchOLByOLID(String olID) async{
     return null;
   }
 }
-
 
 Future<Book> searchOLByISBN(String ISBN) async {
   if (ISBN.length > 13 || ISBN.length < 9) {
@@ -263,8 +309,7 @@ Future<List<Work>> searchOLByName(String searchTerm, {String publisher}) async {
   if (publisher != null) {
     searchQuery = "$searchQuery&publisher=$publisher";
   }
-  http.Response searchResult =
-  await http.get("$OPEN_LIB_API/search.json?$searchQuery");
+  http.Response searchResult = await http.get("$OPEN_LIB_API/search.json?$searchQuery");
   if (searchResult.statusCode == 200) {
     Map<String, dynamic> jsonResponse = json.decode(searchResult.body);
     List<Work> works = [];
@@ -276,8 +321,7 @@ Future<List<Work>> searchOLByName(String searchTerm, {String publisher}) async {
       workRes["title"] ??= "";
       parsedResponse["title"] = workRes["title"];
       workRes["seed"] ??= [];
-      parsedResponse["bookLinks"] =
-      List<String>.from(workRes["seed"].where((dynamic link) {
+      parsedResponse["bookLinks"] = List<String>.from(workRes["seed"].where((dynamic link) {
         if ((link as String).startsWith("/books")) {
           return true;
         } else {

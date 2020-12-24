@@ -10,8 +10,9 @@ class PreBookData {
   final String ISBN;
   final String olID;
   final int found;
+  final int id;
 
-  PreBookData(this.name, this.url, this.ISBN, this.olID, this.found);
+  PreBookData(this.name, this.url, this.ISBN, this.olID, this.found, {this.id});
 
   Map<String, dynamic> toMap() {
     return {"name": name, "url": url, "isbn": ISBN, "olID": olID, "found": found};
@@ -42,7 +43,6 @@ Future<void> insertPreBook(PreBookData data) async {
   );
 }
 
-
 // A method that retrieves all the dogs from the dogs table.
 Future<List<PreBookData>> getPreBooks() async {
   final Database db = await getOrCreateDatabaseFactory();
@@ -50,13 +50,16 @@ Future<List<PreBookData>> getPreBooks() async {
 
   return List.generate(maps.length, (i) {
     return PreBookData(
-      maps[i]["name"],
-      maps[i]["url"],
-      maps[i]["isbn"],
-      maps[i]["olID"],
-      maps[i]["found"]
-    );
+        maps[i]["name"], maps[i]["url"], maps[i]["isbn"], maps[i]["olID"], maps[i]["found"], id: maps[i]["id"]);
   });
 }
 
+Future<void> deletePreBook(int id) async {
+  final Database db = await getOrCreateDatabaseFactory();
 
+  await db.delete(
+    'prebooks',
+    where: "id = ?",
+    whereArgs: [id],
+  );
+}

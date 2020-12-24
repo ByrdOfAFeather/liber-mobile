@@ -120,20 +120,23 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [CircularProgressIndicator()]);
                 } else if (snapshot.data.isEmpty &&
                     snapshot.connectionState == ConnectionState.done) {
-                  return Text(
-                      "Okay well there isn't anything here"); // TODO: Change
+                  return ListView(children: [Center(child: Text("No Books Found"))]); // TODO: Change
                 } else {
                   return ListView.builder(
                       itemCount: snapshot.data.length,
                       itemBuilder: (BuildContext context, int index) {
-                        Widget currentIcon = snapshot.data[index].found == 0
-                            ? Icon(Icons.close, color: Colors.red)
-                            : Icon(Icons.check, color: Colors.green);
-                        print(snapshot.data[index]);
                         return Card(
                             child: ListTile(
                               title: Text(snapshot.data[index].name),
-                              trailing: currentIcon,
+                              trailing: IconButton(
+                                icon: Icon(Icons.delete),
+                                onPressed: () async {
+                                  await deletePreBook(snapshot.data[index].id);
+                                  setState(() {
+                                    _getPreBook = getPreBooks();
+                                  });
+                                },
+                              ),
                               onTap: () {
                                 Navigator.push(
                                     context,
