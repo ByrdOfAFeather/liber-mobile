@@ -88,7 +88,8 @@ Future<bool> addBook() async {
 }
 
 Future<Map<String, dynamic>> getIDEntityPagination(int paginationIndex, IDEntityType paginationType) async {
-  http.Response libRes = await http.get("$LIBRARY_API/$paginationType?pagination_index=$paginationIndex");
+  String entitySafe = paginationType.toString().replaceAll(RegExp("IDEntityType."), "");
+  http.Response libRes = await http.get("$LIBRARY_API/$entitySafe?pagination_index=$paginationIndex");
   if (libRes.statusCode == 200) {
     Map<String, dynamic> jsonRes = json.decode(libRes.body);
     List<IDEntity> entities;
@@ -167,8 +168,9 @@ Future<List<Author>> parseAuthors(List<dynamic> potentialAuthors) async {
 Future<IDEntity> getOrCreateIDEntity(String entityName, IDEntityType entityType) async {
   String entitySafe = entityType.toString().replaceAll(RegExp("IDEntityType."), "");
   http.Response entityRes = await http.get("$LIBRARY_API/$entitySafe?name=$entityName");
-  if (entityRes.statusCode == 200) {
-    return IDEntity.fromJson(json.decode(entityRes.body));
+  Map<String, dynamic> jsonRes = json.decode(entityRes.body);
+  if (entityRes.statusCode == 200 && jsonRes["exact_match"]) {
+    return IDEntity.fromJson(jsonRes["results"][0]);
   } else if (entityRes.statusCode == 404) {
     http.Response publisherCreateRes = await http.post("$LIBRARY_API/$entitySafe",
         body: json.encode(
@@ -185,6 +187,22 @@ Future<IDEntity> getOrCreateIDEntity(String entityName, IDEntityType entityType)
   } else {
     print("Hey I couldn't find or add $entityName");
     // publishers.add(null); // TODO: Again handle this downstream
+    return null;
+  }
+}
+
+Future<Map<String, dynamic>> searchPublishers(String searchTerm) async {
+  http.Response searchRes = await http.get("$LIBRARY_API/publisher?name=$searchTerm");
+  if (searchRes.statusCode == 200) {
+    Map<String, dynamic> searchResJson = json.decode(searchRes.body);
+    List<IDEntity> publishers = [];
+    for (Map<String, dynamic> res in searchResJson["results"]) {
+      publishers.add(IDEntity.fromJson(res));
+    }
+    return {"result": publishers};
+  } else if (searchRes.statusCode == 404) {
+    return {"result": <NamedEntity>[]};
+  } else {
     return null;
   }
 }
