@@ -11,7 +11,11 @@ class PaginationWidget<T extends NamedEntity> extends StatefulWidget {
   final Function futureGetterSearch;
   final Function onSelect;
 
-  const PaginationWidget({Key key, this.futureGetterPagination, this.onSelect, this.futureGetterSearch})
+  const PaginationWidget(
+      {Key key,
+        this.futureGetterPagination,
+        this.onSelect,
+        this.futureGetterSearch})
       : super(key: key);
 
   @override
@@ -20,7 +24,8 @@ class PaginationWidget<T extends NamedEntity> extends StatefulWidget {
   }
 }
 
-class _PaginationWidgetState<T extends NamedEntity> extends State<PaginationWidget> {
+class _PaginationWidgetState<T extends NamedEntity>
+    extends State<PaginationWidget> {
   Future<Map<String, dynamic>> future;
   int paginationIndex = 0;
   bool searchMode = false;
@@ -61,7 +66,8 @@ class _PaginationWidgetState<T extends NamedEntity> extends State<PaginationWidg
                           return;
                         } else {
                           paginationIndex -= 10;
-                          future = widget.futureGetterPagination(paginationIndex);
+                          future =
+                              widget.futureGetterPagination(paginationIndex);
                         }
                       });
                     });
@@ -94,12 +100,14 @@ class _PaginationWidgetState<T extends NamedEntity> extends State<PaginationWidg
                         if (_searchController.text.isNotEmpty) {
                           setState(() {
                             searchMode = true;
-                            future = widget.futureGetterSearch(_searchController.text);
+                            future = widget
+                                .futureGetterSearch(_searchController.text);
                           });
                         } else {
                           setState(() {
                             searchMode = false;
-                            future = widget.futureGetterPagination(paginationIndex);
+                            future =
+                                widget.futureGetterPagination(paginationIndex);
                           });
                         }
                       },
@@ -111,12 +119,14 @@ class _PaginationWidgetState<T extends NamedEntity> extends State<PaginationWidg
                         if (_searchController.text.isNotEmpty) {
                           setState(() {
                             searchMode = true;
-                            future = widget.futureGetterSearch(_searchController.text);
+                            future = widget
+                                .futureGetterSearch(_searchController.text);
                           });
                         } else {
                           setState(() {
                             searchMode = false;
-                            future = widget.futureGetterPagination(paginationIndex);
+                            future =
+                                widget.futureGetterPagination(paginationIndex);
                           });
                         }
                       },
@@ -124,7 +134,8 @@ class _PaginationWidgetState<T extends NamedEntity> extends State<PaginationWidg
                   ),
                   upButton,
                   Expanded(
-                    child: pagination.length != 0 ? ListView.builder(
+                    child: pagination.length != 0
+                        ? ListView.builder(
                         shrinkWrap: true,
                         itemCount: pagination.length,
                         itemBuilder: (BuildContext context, int index) {
@@ -132,10 +143,12 @@ class _PaginationWidgetState<T extends NamedEntity> extends State<PaginationWidg
                             child: ListTile(
                               trailing: Icon(Icons.check),
                               title: Text(pagination[index].name),
-                              onTap: () => widget.onSelect(pagination[index]),
+                              onTap: () =>
+                                  widget.onSelect(pagination[index]),
                             ),
                           );
-                        }) : Center(child: Text("No Results Found")),
+                        })
+                        : Center(child: Text("No Results Found")),
                   ),
                   downButton
                 ],
@@ -174,7 +187,8 @@ class _NamedEntitySelect<T extends NamedEntity> extends StatefulWidget {
   }
 }
 
-class _NamedEntitySelectionState<T extends NamedEntity> extends State<_NamedEntitySelect> {
+class _NamedEntitySelectionState<T extends NamedEntity>
+    extends State<_NamedEntitySelect> {
   T selectedEntity;
   String cardText;
 
@@ -190,7 +204,9 @@ class _NamedEntitySelectionState<T extends NamedEntity> extends State<_NamedEnti
   Widget build(BuildContext context) {
     return Card(
       child: ListTile(
-        trailing: IconButton(icon: Icon(Icons.delete), onPressed: () => widget.onDelete(selectedEntity)),
+        trailing: IconButton(
+            icon: Icon(Icons.delete),
+            onPressed: () => widget.onDelete(selectedEntity)),
         onTap: () async {
           var futureEntity = await showDialog(
               context: context,
@@ -236,7 +252,8 @@ enum PhysicalFormats {
   LeatherBound,
   TurtleBack,
   AudioBookUnabridged,
-  AudioBookAbridged
+  AudioBookAbridged,
+  Unknown
 }
 
 const Map<PhysicalFormats, String> physicalFormatToString = {
@@ -246,7 +263,8 @@ const Map<PhysicalFormats, String> physicalFormatToString = {
   PhysicalFormats.LibraryBinding: "Library Binding",
   PhysicalFormats.SpiralBinding: "Spiral Binding",
   PhysicalFormats.LeatherBound: "Leather Bound",
-  PhysicalFormats.TurtleBack: "Turtleback"
+  PhysicalFormats.TurtleBack: "Turtleback",
+  PhysicalFormats.Unknown: "Unknown",
   // TODO: Perhaps at some point audio books are important, not now
 };
 
@@ -295,26 +313,42 @@ class FormatSelectorField extends FormField<String> {
       validator: validator,
       initialValue: initialValue,
       builder: (FormFieldState<String> state) {
-        return Card(
-          child: ListTile(
-              title: Text(state.value),
-              onTap: () {
-                showDialog(context: state.context, builder: (BuildContext context) => _FormatSelector())
-                    .then((value) {
-                  if (value != null) {
-                    state.didChange(physicalFormatToString[value]);
-                    state.save();
-                  }
-                });
-              }),
+        return Column(
+          children: [
+            Text("Select Physical format"),
+            Card(
+              child: ListTile(
+                  title: Text(state.value),
+                  onTap: () {
+                    showDialog(
+                        context: state.context,
+                        builder: (BuildContext context) =>
+                            _FormatSelector()).then((value) {
+                      if (value != null) {
+                        state.didChange(physicalFormatToString[value]);
+                        state.save();
+                      }
+                    });
+                  }),
+            )
+          ],
         );
       });
 }
 
 class _BookInfo extends StatefulWidget {
-  final Book initData;
+  final TextEditingController titleController;
+  final TextEditingController isbnController;
+  final PhysicalFormats selectedFormat;
+  final FormatSelectorField formatSelector;
 
-  const _BookInfo({Key key, this.initData}) : super(key: key);
+  const _BookInfo(
+      {Key key,
+        this.titleController,
+        this.isbnController,
+        this.selectedFormat,
+        this.formatSelector})
+      : super(key: key);
 
   @override
   State<StatefulWidget> createState() {
@@ -323,8 +357,6 @@ class _BookInfo extends StatefulWidget {
 }
 
 class _BookInfoState extends State<_BookInfo> {
-  TextEditingController _titleController;
-  TextEditingController _isbnController;
   IconData currentDisplayStateIcon = Icons.arrow_upward;
   bool displaying = true;
   String formatValue;
@@ -333,16 +365,13 @@ class _BookInfoState extends State<_BookInfo> {
 
   @override
   void initState() {
-    _titleController = TextEditingController(text: widget.initData.name);
-    _isbnController = TextEditingController(text: widget.initData.isbn);
-    formatValue = widget.initData.format;
     super.initState();
   }
 
   @override
   void dispose() {
-    _titleController.dispose();
-    _isbnController.dispose();
+    widget.titleController.dispose();
+    widget.isbnController.dispose();
     super.dispose();
   }
 
@@ -381,28 +410,26 @@ class _BookInfoState extends State<_BookInfo> {
               children: [
                 ListTile(
                   title: TextFormField(
-                    controller: _titleController,
+                    controller: widget.titleController,
                     decoration: InputDecoration(labelText: "Title"),
                     onEditingComplete: () {
-                      titleValue = _titleController.text;
+                      titleValue = widget.titleController.text;
                       FocusScope.of(context).unfocus();
                     },
                   ),
                 ),
                 ListTile(
                   title: TextFormField(
-                      controller: _isbnController,
+                      controller: widget.isbnController,
                       decoration: InputDecoration(labelText: "ISBN #"),
                       onEditingComplete: () {
-                        isbnValue = _isbnController.text;
+                        isbnValue = widget.isbnController.text;
                         FocusScope.of(context).unfocus();
                       }),
                 ),
-                FormatSelectorField(
-                  onSaved: (String newFormat) {
-                    formatValue = newFormat;
-                  },
-                  initialValue: formatValue,
+                Padding(
+                  padding: EdgeInsets.only(top: 20),
+                  child:widget.formatSelector
                 )
               ],
             )
@@ -415,9 +442,11 @@ class _BookInfoState extends State<_BookInfo> {
 }
 
 class _PublisherInfo extends StatefulWidget {
-  final Book initData;
+  final String publishDate;
+  final List<IDEntity> publishers;
 
-  const _PublisherInfo({Key key, this.initData}) : super(key: key);
+  const _PublisherInfo({Key key, this.publishDate, this.publishers})
+      : super(key: key);
 
   @override
   State<StatefulWidget> createState() {
@@ -425,7 +454,8 @@ class _PublisherInfo extends StatefulWidget {
   }
 }
 
-class _PublisherInfoState extends State<_PublisherInfo> with SingleTickerProviderStateMixin {
+class _PublisherInfoState extends State<_PublisherInfo>
+    with SingleTickerProviderStateMixin {
   IconData currentDisplayStateIcon = Icons.arrow_upward;
   bool displaying = true;
 
@@ -463,7 +493,10 @@ class _PublisherInfoState extends State<_PublisherInfo> with SingleTickerProvide
             child: displaying
                 ? Column(
               children: [
-                ...widget.initData.publishers.asMap().entries.map((publisherEntry) {
+                ...widget.publishers
+                    .asMap()
+                    .entries
+                    .map((publisherEntry) {
                   IDEntity publisher = publisherEntry.value;
                   int index = publisherEntry.key;
                   return _NamedEntitySelect<IDEntity>(
@@ -472,11 +505,12 @@ class _PublisherInfoState extends State<_PublisherInfo> with SingleTickerProvide
                     initNamedEntity: publisher,
                     title: "Select Publisher",
                     onSelect: (IDEntity toChange) {
-                      widget.initData.publishers[index] = toChange;
+                      widget.publishers[index] = toChange;
                     },
                     onDelete: (IDEntity toRemove) {
                       setState(() {
-                        widget.initData.publishers.removeWhere((IDEntity pub) => pub.id == toRemove.id);
+                        widget.publishers.removeWhere(
+                                (IDEntity pub) => pub.id == toRemove.id);
                       });
                     },
                   );
@@ -490,25 +524,31 @@ class _PublisherInfoState extends State<_PublisherInfo> with SingleTickerProvide
                             return AlertDialog(
                               title: Text("Select Publisher to Add"),
                               content: PaginationWidget(
-                                futureGetterPagination: getPublishersPagination,
-                                onSelect: (IDEntity newSelectedPublisher) {
-                                  Navigator.of(context).pop(newSelectedPublisher);
+                                futureGetterSearch: searchPublishers,
+                                futureGetterPagination:
+                                getPublishersPagination,
+                                onSelect:
+                                    (IDEntity newSelectedPublisher) {
+                                  Navigator.of(context)
+                                      .pop(newSelectedPublisher);
                                 },
                               ),
                             );
                           });
                       if (futurePublisher != null) {
                         setState(() {
-                          if (!widget.initData.publishers.contains(futurePublisher)) {
-                            widget.initData.publishers.add(futurePublisher);
+                          if (!widget.publishers
+                              .contains(futurePublisher)) {
+                            widget.publishers.add(futurePublisher);
                           }
                         });
                       }
                     }),
                 ListTile(
                   title: TextFormField(
-                    initialValue: widget.initData.publishDate,
-                    decoration: InputDecoration(labelText: "Publish Date"),
+                    initialValue: widget.publishDate,
+                    decoration:
+                    InputDecoration(labelText: "Publish Date"),
                   ),
                 ),
               ],
@@ -520,9 +560,9 @@ class _PublisherInfoState extends State<_PublisherInfo> with SingleTickerProvide
 }
 
 class _AuthorInfo extends StatefulWidget {
-  final Book initData;
+  final List<IDEntity> authors;
 
-  const _AuthorInfo({Key key, this.initData}) : super(key: key);
+  const _AuthorInfo({Key key, this.authors}) : super(key: key);
 
   @override
   State<StatefulWidget> createState() {
@@ -563,22 +603,60 @@ class _AuthorInfoState extends State<_AuthorInfo> {
           child: displaying
               ? Column(
             children: [
-              ...widget.initData.authors.asMap().entries.map((authorEntry) {
-                Author author = authorEntry.value;
+              ...widget.authors
+                  .asMap()
+                  .entries
+                  .map((authorEntry) {
+                IDEntity author = authorEntry.value;
                 int index = authorEntry.key;
-                return _NamedEntitySelect<Author>(
+                return _NamedEntitySelect<IDEntity>(
+                  title: "Select Author",
+                  searchGetter: searchAuthors,
                   paginationGetter: getAuthorsPagination,
                   initNamedEntity: author,
-                  onSelect: (Author toChange) {
-                    widget.initData.authors[index] = toChange;
-                  },
-                  onDelete: (Author toRemove) {
+                  onSelect: (IDEntity toChange) {
                     setState(() {
-                      widget.initData.authors.removeWhere((Author pub) => pub.olID == toRemove.olID);
+                      widget.authors[index] = toChange;
+                    });
+                  },
+                  onDelete: (IDEntity toRemove) {
+                    setState(() {
+                      widget.authors.removeWhere(
+                              (IDEntity pub) => pub.id == toRemove.id);
                     });
                   },
                 );
-              })
+              }),
+              // TODO: This is more repeat code
+              IconButton(
+                  icon: Icon(Icons.add),
+                  onPressed: () async {
+                    var futureAuthor = await showDialog(
+                        context: context,
+                        builder: (BuildContext context) {
+                          return AlertDialog(
+                            title: Text("Select Author to Add"),
+                            content: PaginationWidget(
+                              futureGetterPagination:
+                              getAuthorsPagination,
+                              onSelect: (IDEntity newSelectedAuthor) {
+                                Navigator.of(context)
+                                    .pop(newSelectedAuthor);
+                              },
+                            ),
+                          );
+                        });
+                    if (futureAuthor != null) {
+                      setState(() {
+                        if (widget.authors
+                            .where((IDEntity author) =>
+                        author.id == futureAuthor.id)
+                            .isEmpty) {
+                          widget.authors.add(futureAuthor);
+                        }
+                      });
+                    }
+                  }),
             ],
           )
               : Container(),
@@ -600,12 +678,39 @@ class BookInfoForm extends StatefulWidget {
 }
 
 class _BookInfoForm extends State<BookInfoForm> {
-  List<IDEntity> selectedPublishers;
   GlobalKey<FormState> _formKey = new GlobalKey<FormState>();
+  String formatValue;
+
+  // Book info setup
+  TextEditingController titleController;
+  TextEditingController isbnController;
+  PhysicalFormats selectedFormat;
+
+  // Publish info setup
+  List<IDEntity> publishers;
+  String publishDate;
+
+  // Author info setup
+  List<IDEntity> authors;
 
   @override
   void initState() {
-    selectedPublishers = widget.initData?.publishers;
+    titleController = TextEditingController(text: widget.initData?.name);
+    isbnController = TextEditingController(text: widget.initData?.isbn);
+
+    selectedFormat =
+    stringToPhysicalFormat[widget.initData?.format?.toLowerCase()];
+    selectedFormat ??= PhysicalFormats.Unknown;
+    formatValue = physicalFormatToString[selectedFormat];
+
+    publishers = widget.initData?.publishers;
+    publishers ??= [];
+    publishDate = widget.initData?.publishDate;
+    publishDate ??= "";
+
+    authors = widget.initData?.authors;
+    authors ??= [];
+
     super.initState();
   }
 
@@ -616,7 +721,8 @@ class _BookInfoForm extends State<BookInfoForm> {
     }
 
     try {
-      widget.initData.format = physicalFormatToString[stringToPhysicalFormat[widget.initData.format.toLowerCase()]];
+      widget.initData.format = physicalFormatToString[
+      stringToPhysicalFormat[widget.initData.format.toLowerCase()]];
     } catch (error) {
       widget.initData.format = "Select Format";
     }
@@ -624,20 +730,31 @@ class _BookInfoForm extends State<BookInfoForm> {
     Widget bookCover = Container();
     if (widget.initData.imageURL != null) {
       bookCover = Center(
-        child: Image.network(widget.initData.imageURL,
-            frameBuilder: (BuildContext context, Widget child, int frame, bool wasSyncLoaded) {
-              if (wasSyncLoaded) {
-                return child;
-              }
-              return AnimatedOpacity(
-                child: child,
-                opacity: frame == null ? 0 : 1,
-                duration: const Duration(seconds: 1),
-                curve: Curves.easeOut,
-              );
-            }),
+        child: Image.network(widget.initData.imageURL, frameBuilder:
+            (BuildContext context, Widget child, int frame,
+            bool wasSyncLoaded) {
+          if (wasSyncLoaded) {
+            return child;
+          }
+          return AnimatedOpacity(
+            child: child,
+            opacity: frame == null ? 0 : 1,
+            duration: const Duration(seconds: 1),
+            curve: Curves.easeOut,
+          );
+        }),
       );
     }
+
+    FormatSelectorField formatSelector = FormatSelectorField(
+      onSaved: (String newFormat) {
+        setState(() {
+          formatValue = newFormat;
+          selectedFormat = stringToPhysicalFormat[newFormat];
+        });
+      },
+      initialValue: formatValue,
+    );
 
     return Form(
         key: _formKey,
@@ -645,9 +762,16 @@ class _BookInfoForm extends State<BookInfoForm> {
           child: Column(
             children: [
               bookCover,
-              _BookInfo(initData: widget.initData),
-              _PublisherInfo(initData: widget.initData),
-              _AuthorInfo(initData: widget.initData)
+              _BookInfo(
+                titleController: titleController,
+                isbnController: isbnController,
+                formatSelector: formatSelector,
+              ),
+              _PublisherInfo(
+                publishDate: publishDate,
+                publishers: publishers,
+              ),
+              _AuthorInfo(authors: authors)
             ],
           ),
         ));

@@ -21,7 +21,7 @@ class Book implements NamedEntity {
   String format;
   String isbn;
   String olID;
-  List<Author> authors;
+  List<IDEntity> authors;
   List<IDEntity> publishers;
 
   Book.fromJson(Map<String, dynamic> json) {
@@ -46,22 +46,13 @@ class IDEntity implements NamedEntity {
     name = json["name"];
     id = json["id"].toString(); // TODO: This probably can be removed later if uuid is used
   }
-}
 
-class Author implements NamedEntity {
-  String name;
-  String olID;
-
-  Author.fromJson(Map<String, dynamic> json) {
-    name = json["name"];
-    olID = json["olID"];
-  }
-
-  Author.unknown() {
+  IDEntity.unknown() {
     name = "Unknown";
-    olID = "";
+    id = "";
   }
 }
+
 
 class Work {
   String title;
@@ -113,7 +104,7 @@ Future<Map<String, dynamic>> getAuthorsPagination(int paginationIndex) async {
   return await getIDEntityPagination(paginationIndex, IDEntityType.author);
 }
 
-Future<List<Author>> parseAuthors(List<dynamic> potentialAuthors) async {
+Future<List<IDEntity>> parseAuthors(List<dynamic> potentialAuthors) async {
   /*
    * There's two cases for the author. Both are lists of dictionaries.
    * If the request is coming from the /api endpoint, there will be name/url
@@ -122,9 +113,9 @@ Future<List<Author>> parseAuthors(List<dynamic> potentialAuthors) async {
    */
 
   if (potentialAuthors == null) {
-    return [Author.unknown()];
+    return [IDEntity.unknown()];
   }
-  List<Author> returnList = [];
+  List<IDEntity> returnList = [];
   if (potentialAuthors.isNotEmpty) {
     for (dynamic authorDict in potentialAuthors) {
       String author = authorDict["name"];
@@ -149,14 +140,14 @@ Future<List<Author>> parseAuthors(List<dynamic> potentialAuthors) async {
           String name = authorJsonResponse["name"];
           RegExpMatch olIDMatch = RegExp("\/OL.*\\.").firstMatch(authorLink);
           String olID = authorLink.substring(olIDMatch.start + 1, olIDMatch.end - 1);
-          Map<String, dynamic> authorInfo = {"name": name, "olID": olID};
-          returnList.add(Author.fromJson(authorInfo));
+          Map<String, dynamic> authorInfo = {"name": name, "id": olID};
+          returnList.add(IDEntity.fromJson(authorInfo));
         }
       } else {
         RegExpMatch regularExpression = RegExp("OL.*\/").firstMatch(authorDict["url"]);
         String olID = authorDict["url"].substring(regularExpression.start, regularExpression.end - 1);
-        Map<String, dynamic> authorInfo = {"name": author, "olID": olID};
-        returnList.add(Author.fromJson(authorInfo));
+        Map<String, dynamic> authorInfo = {"name": author, "id": olID};
+        returnList.add(IDEntity.fromJson(authorInfo));
       }
     }
   } else {
@@ -207,6 +198,25 @@ Future<Map<String, dynamic>> searchPublishers(String searchTerm) async {
   }
 }
 
+Future<Map<String, dynamic>> searchAuthors(String searchTerm) async {
+  // TODO: this is again copy/pasted from above, thus needs to be refactored
+  http.Response searchRes = await http.get("$LIBRARY_API/author?name=$searchTerm");
+  if (searchRes.statusCode == 200) {
+    Map<String, dynamic> searchResJson = json.decode(searchRes.body);
+    List<IDEntity> publishers = [];
+    for (Map<String, dynamic> res in searchResJson["results"]) {
+      publishers.add(IDEntity.fromJson(res));
+    }
+    return {"result": publishers};
+  } else if (searchRes.statusCode == 404) {
+    return {"result": <NamedEntity>[]};
+  } else {
+    return null;
+  }
+}
+
+
+
 Future<List<IDEntity>> getOrCreatePublishers(List<String> publisherNames) async {
   if (publisherNames == null) {
     return [];
@@ -223,15 +233,41 @@ Future<List<IDEntity>> getOrCreatePublishers(List<String> publisherNames) async 
   return publishers;
 }
 
-Future<List<IDEntity>> getOrCreateAuthors(List<String> authorNames) async {
-  List<IDEntity> authors = [];
-  if (authorNames == null) {
+Future<IDEntity> getOrCreateAuthor(IDEntity author) async {
+  // TODO: Lots of copy and pasted code
+  http.Response entityRes = await http.get("$LIBRARY_API/author?olid=${author.id}");
+  Map<String, dynamic> jsonRes = json.decode(entityRes.body);
+  if (entityRes.statusCode == 200) {
+    return IDEntity.fromJson(jsonRes["results"]);
+  } else if (entityRes.statusCode == 404) {
+    http.Response authorCreateRes = await http.post("$LIBRARY_API/author",
+        body: json.encode(
+          {"name": author.name, "olid": author.id},
+        ),
+        headers: {"content-type": "application/json"});
+    if (authorCreateRes.statusCode == 200) {
+      return IDEntity.fromJson(json.decode(authorCreateRes.body));
+    } else {
+      print("Hey I couldn't add ${author.name}");
+      // publishers.add(null); // TODO: Handle this downstream
+      return null;
+    }
+  } else {
+    print("Hey I couldn't find or add ${author.name}");
+    // publishers.add(null); // TODO: Again handle this downstream
+    return null;
+  }
+}
+
+Future<List<IDEntity>> getOrCreateAuthors(List<IDEntity> authors) async {
+  List<IDEntity> addedAuthors = [];
+  if (authors == null) {
     return [];
   }
-  for (String author in authorNames) {
-    IDEntity currentAuthor = await getOrCreateIDEntity(author, IDEntityType.author);
+  for (IDEntity author in authors) {
+    IDEntity currentAuthor = await getOrCreateAuthor(author);
     if (currentAuthor != null) {
-      authors.add(currentAuthor);
+      addedAuthors.add(currentAuthor);
     } else {
       // TODO: here
     }
@@ -241,7 +277,7 @@ Future<List<IDEntity>> getOrCreateAuthors(List<String> authorNames) async {
 
 Future<Book> parseBook(http.Response res) async {
   Map<String, dynamic> jsonResponse = json.decode(res.body);
-  List<Author> authorsList;
+  List<IDEntity> authorsList;
   String openLibID = (jsonResponse["key"] as String).replaceAll(RegExp("/books/"), "");
   if (jsonResponse["authors"] == null) {
     http.Response authorRes = await http.get("$OPEN_LIB_API/api/books?bibkeys=OLID:$openLibID&jscmd=data&format=json");
@@ -259,6 +295,8 @@ Future<Book> parseBook(http.Response res) async {
     List<dynamic> authorsDicts = jsonResponse["authors"] as List<dynamic>;
     authorsList = await parseAuthors(authorsDicts);
   }
+
+  await getOrCreateAuthors(authorsList);
 
   if (jsonResponse["publishers"] == null) {
     jsonResponse["publishers"] = [];
