@@ -268,6 +268,18 @@ const Map<PhysicalFormats, String> physicalFormatToString = {
   // TODO: Perhaps at some point audio books are important, not now
 };
 
+const Map<PhysicalFormats, String> physicalFormatToApiString = {
+  PhysicalFormats.Hardcover: "HARDCOVER",
+  PhysicalFormats.Paperback: "SOFTCOVER",
+  PhysicalFormats.MassMarketPaperBack: "MASSMARKETPAPERBACK",
+  PhysicalFormats.LibraryBinding: "LIBRARYBINDING",
+  PhysicalFormats.SpiralBinding: "SPIRALBINDING",
+  PhysicalFormats.LeatherBound: "LEATHERBOUND",
+  PhysicalFormats.TurtleBack: "TURTLEBACK",
+  PhysicalFormats.Unknown: "UNKNOWN",
+  // TODO: Perhaps at some point audio books are important, not now
+};
+
 const Map<String, PhysicalFormats> stringToPhysicalFormat = {
   "paperback": PhysicalFormats.Paperback,
   "library binding": PhysicalFormats.LibraryBinding,
@@ -416,6 +428,13 @@ class _BookInfoState extends State<_BookInfo> {
                       titleValue = widget.titleController.text;
                       FocusScope.of(context).unfocus();
                     },
+                    validator: (String validTest) {
+                      if (validTest.isEmpty) {
+                        return "The book must have a title!";
+                      } else {
+                        return null;
+                      }
+                    },
                   ),
                 ),
                 ListTile(
@@ -428,9 +447,8 @@ class _BookInfoState extends State<_BookInfo> {
                       }),
                 ),
                 Padding(
-                  padding: EdgeInsets.only(top: 20),
-                  child:widget.formatSelector
-                )
+                    padding: EdgeInsets.only(top: 20),
+                    child: widget.formatSelector)
               ],
             )
                 : Container(),
@@ -442,10 +460,10 @@ class _BookInfoState extends State<_BookInfo> {
 }
 
 class _PublisherInfo extends StatefulWidget {
-  final String publishDate;
+  final TextEditingController publishDateController;
   final List<IDEntity> publishers;
 
-  const _PublisherInfo({Key key, this.publishDate, this.publishers})
+  const _PublisherInfo({Key key, this.publishDateController, this.publishers})
       : super(key: key);
 
   @override
@@ -546,7 +564,7 @@ class _PublisherInfoState extends State<_PublisherInfo>
                     }),
                 ListTile(
                   title: TextFormField(
-                    initialValue: widget.publishDate,
+                    controller: widget.publishDateController,
                     decoration:
                     InputDecoration(labelText: "Publish Date"),
                   ),
@@ -603,10 +621,7 @@ class _AuthorInfoState extends State<_AuthorInfo> {
           child: displaying
               ? Column(
             children: [
-              ...widget.authors
-                  .asMap()
-                  .entries
-                  .map((authorEntry) {
+              ...widget.authors.asMap().entries.map((authorEntry) {
                 IDEntity author = authorEntry.value;
                 int index = authorEntry.key;
                 return _NamedEntitySelect<IDEntity>(
@@ -666,18 +681,19 @@ class _AuthorInfoState extends State<_AuthorInfo> {
   }
 }
 
-class BookInfoForm extends StatefulWidget {
+class _BookForm extends StatefulWidget {
   final Book initData;
+  final int localBookID;
 
-  const BookInfoForm({Key key, this.initData}) : super(key: key);
+  const _BookForm({Key key, this.initData, this.localBookID}) : super(key: key);
 
   @override
   State<StatefulWidget> createState() {
-    return _BookInfoForm();
+    return _BookFormState();
   }
 }
 
-class _BookInfoForm extends State<BookInfoForm> {
+class _BookFormState extends State<_BookForm> {
   GlobalKey<FormState> _formKey = new GlobalKey<FormState>();
   String formatValue;
 
@@ -688,7 +704,7 @@ class _BookInfoForm extends State<BookInfoForm> {
 
   // Publish info setup
   List<IDEntity> publishers;
-  String publishDate;
+  TextEditingController publishDateController;
 
   // Author info setup
   List<IDEntity> authors;
@@ -705,8 +721,8 @@ class _BookInfoForm extends State<BookInfoForm> {
 
     publishers = widget.initData?.publishers;
     publishers ??= [];
-    publishDate = widget.initData?.publishDate;
-    publishDate ??= "";
+    publishDateController =
+        TextEditingController(text: widget.initData?.publishDate);
 
     authors = widget.initData?.authors;
     authors ??= [];
@@ -768,10 +784,45 @@ class _BookInfoForm extends State<BookInfoForm> {
                 formatSelector: formatSelector,
               ),
               _PublisherInfo(
-                publishDate: publishDate,
+                publishDateController: publishDateController,
                 publishers: publishers,
               ),
-              _AuthorInfo(authors: authors)
+              _AuthorInfo(authors: authors),
+              RaisedButton(
+                child: Text("Verify"),
+                color: Colors.green,
+                onPressed: () async {
+                  if (_formKey.currentState.validate()) {
+                    SnackBar addBookScaffold = SnackBar(
+                      content: Text("Adding Book"),
+                    );
+                    Scaffold.of(context).showSnackBar(addBookScaffold);
+
+                    Map<String, dynamic> bookData = {
+                      "authors": IDEntityListToMap(authors),
+                      "publishers": IDEntityListToMap(publishers),
+                      "publish_date": publishDateController.text,
+                      "title": titleController.text,
+                      "isbn": isbnController.text,
+                      "physical_format":
+                      physicalFormatToApiString[selectedFormat]
+                    };
+
+                    Map<String, dynamic> bookRes = await saveBook(bookData);
+                    if (bookRes["status_code"] == 200) {
+                      await deletePreBook(widget.localBookID);
+                      Navigator.of(context).pop();
+                    } else {
+                      Scaffold.of(context).removeCurrentSnackBar();
+                      SnackBar failedToAddScaffold = SnackBar(
+                        content: Text("Failed to add book, please report this"),
+                        duration: Duration(seconds: 2),
+                      );
+                      Scaffold.of(context).showSnackBar(failedToAddScaffold);
+                    }
+                  }
+                },
+              )
             ],
           ),
         ));
@@ -785,11 +836,11 @@ class BookForm extends StatefulWidget {
 
   @override
   State<StatefulWidget> createState() {
-    return _BookFormState();
+    return BookFormState();
   }
 }
 
-class _BookFormState extends State<BookForm> {
+class BookFormState extends State<BookForm> {
   Future<Book> bookData;
 
   @override
@@ -814,9 +865,11 @@ class _BookFormState extends State<BookForm> {
                 return Center(child: CircularProgressIndicator());
               } else if (snapshot.connectionState == ConnectionState.done) {
                 if (snapshot.data == null) {
-                  return BookInfoForm();
+                  return _BookForm();
                 } else {
-                  return BookInfoForm(initData: snapshot.data);
+                  return _BookForm(
+                      initData: snapshot.data,
+                      localBookID: widget.initializationData.id);
                 }
               } else {
                 return Text("ERROR");
@@ -827,84 +880,3 @@ class _BookFormState extends State<BookForm> {
     return null;
   }
 }
-
-/*
-Padding(
-                  padding: EdgeInsets.only(top: 20, bottom: 20),
-                  child: Column(
-                    children: [
-                      Text("Publisher Info", style: TextStyle(fontSize: 22)),
-                      Divider(),
-                      ...widget.initData.publishers.asMap().entries.map((publisherEntry) {
-                        IDEntity publisher = publisherEntry.value;
-                        int index = publisherEntry.key;
-                        return _NamedEntitySelect<IDEntity>(
-                          paginationGetter: getPublishersPagination,
-                          initNamedEntity: publisher,
-                          onSelect: (IDEntity toChange) {
-                            widget.initData.publishers[index] = toChange;
-                          },
-                          onDelete: (IDEntity toRemove) {
-                            setState(() {
-                              widget.initData.publishers.removeWhere((IDEntity pub) => pub.id == toRemove.id);
-                            });
-                          },
-                        );
-                      }),
-                      IconButton(
-                          icon: Icon(Icons.add),
-                          onPressed: () async {
-                            var futurePublisher = await showDialog(
-                                context: context,
-                                builder: (BuildContext context) {
-                                  return AlertDialog(
-                                    content: PaginationWidget(
-                                      futureGetter: getPublishersPagination,
-                                      onSelect: (IDEntity newSelectedPublisher) {
-                                        Navigator.of(context).pop(newSelectedPublisher);
-                                      },
-                                    ),
-                                  );
-                                });
-                            if (futurePublisher != null) {
-                              setState(() {
-                                if (!widget.initData.publishers.contains(futurePublisher)) {
-                                  widget.initData.publishers.add(futurePublisher);
-                                }
-                              });
-                            }
-                          }),
-                      ListTile(
-                        title: TextFormField(
-                          initialValue: widget.initData.publishDate,
-                          decoration: InputDecoration(labelText: "Publish Date"),
-                        ),
-                      ),
-                    ],
-                  )),
-              // ),
-              Padding(
-                  padding: EdgeInsets.only(top: 20),
-                  child: Column(
-                    children: [
-                      Text("Author Info", style: TextStyle(fontSize: 22)),
-                      Divider(),
-                      ...widget.initData.authors.asMap().entries.map((authorEntry) {
-                        Author author = authorEntry.value;
-                        int index = authorEntry.key;
-                        return _NamedEntitySelect<Author>(
-                          paginationGetter: getAuthorsPagination,
-                          initNamedEntity: author,
-                          onSelect: (Author toChange) {
-                            widget.initData.authors[index] = toChange;
-                          },
-                          onDelete: (Author toRemove) {
-                            setState(() {
-                              widget.initData.authors.removeWhere((Author pub) => pub.olID == toRemove.olID);
-                            });
-                          },
-                        );
-                      })
-                    ],
-                  ))
- */

@@ -5,8 +5,8 @@ import 'package:http/http.dart' as http;
 
 const String OPEN_LIB_API = "https://openlibrary.org";
 const String COVER_OPEN_LIB_API = "https://covers.openlibrary.org";
-// const String LIBRARY_API = "https://liber-pl.herokuapp.com/api";
-const String LIBRARY_API = "http://192.168.1.236:8000/api";
+const String LIBRARY_API = "https://liber-pl.herokuapp.com/api";
+// const String LIBRARY_API = "http://192.168.1.236:8000/api";
 
 class NamedEntity {
   String name;
@@ -44,7 +44,8 @@ class IDEntity implements NamedEntity {
 
   IDEntity.fromJson(Map<String, dynamic> json) {
     name = json["name"];
-    id = json["id"].toString(); // TODO: This probably can be removed later if uuid is used
+    id = json["id"]
+        .toString(); // TODO: This probably can be removed later if uuid is used
   }
 
   IDEntity.unknown() {
@@ -52,7 +53,6 @@ class IDEntity implements NamedEntity {
     id = "";
   }
 }
-
 
 class Work {
   String title;
@@ -74,29 +74,53 @@ Future<List<Book>> getBooks() async {
   return null;
 }
 
-Future<bool> addBook() async {
-  return null;
+Future<Map<String, dynamic>> saveBook(Map<String, dynamic> bookData) async {
+  http.Response saveBookRes = await http.post("$LIBRARY_API/book",
+      body: json.encode(bookData),
+      headers: {"content-type": "application/json"});
+  if (saveBookRes.statusCode == 200) {
+    return {
+      "status_code": saveBookRes.statusCode
+    };
+  } else if (saveBookRes.statusCode == 403){
+    // TODO: Error Parsing
+    return {
+      "status_code": saveBookRes.statusCode
+    };
+  } else {
+    return {
+      "status_code": saveBookRes.statusCode
+    };
+  }
 }
 
-Future<Map<String, dynamic>> getIDEntityPagination(int paginationIndex, IDEntityType paginationType) async {
-  String entitySafe = paginationType.toString().replaceAll(RegExp("IDEntityType."), "");
-  http.Response libRes = await http.get("$LIBRARY_API/$entitySafe?pagination_index=$paginationIndex");
+Future<Map<String, dynamic>> getIDEntityPagination(
+    int paginationIndex, IDEntityType paginationType) async {
+  String entitySafe =
+      paginationType.toString().replaceAll(RegExp("IDEntityType."), "");
+  http.Response libRes = await http
+      .get("$LIBRARY_API/$entitySafe?pagination_index=$paginationIndex");
   if (libRes.statusCode == 200) {
     Map<String, dynamic> jsonRes = json.decode(libRes.body);
     List<IDEntity> entities;
     try {
-      entities =
-      List<IDEntity>.from(jsonRes["result"].map((publisherInfo) => IDEntity.fromJson(publisherInfo)).toList());
+      entities = List<IDEntity>.from(jsonRes["result"]
+          .map((publisherInfo) => IDEntity.fromJson(publisherInfo))
+          .toList());
     } catch (e) {
       print(e);
     }
-    return {"result": entities, "end_of_pagination": jsonRes["end_of_pagination"]};
+    return {
+      "result": entities,
+      "end_of_pagination": jsonRes["end_of_pagination"]
+    };
   } else {
     return null;
   }
 }
 
-Future<Map<String, dynamic>> getPublishersPagination(int paginationIndex) async {
+Future<Map<String, dynamic>> getPublishersPagination(
+    int paginationIndex) async {
   return await getIDEntityPagination(paginationIndex, IDEntityType.publisher);
 }
 
@@ -139,13 +163,16 @@ Future<List<IDEntity>> parseAuthors(List<dynamic> potentialAuthors) async {
           Map<String, dynamic> authorJsonResponse = json.decode(authorRes.body);
           String name = authorJsonResponse["name"];
           RegExpMatch olIDMatch = RegExp("\/OL.*\\.").firstMatch(authorLink);
-          String olID = authorLink.substring(olIDMatch.start + 1, olIDMatch.end - 1);
+          String olID =
+              authorLink.substring(olIDMatch.start + 1, olIDMatch.end - 1);
           Map<String, dynamic> authorInfo = {"name": name, "id": olID};
           returnList.add(IDEntity.fromJson(authorInfo));
         }
       } else {
-        RegExpMatch regularExpression = RegExp("OL.*\/").firstMatch(authorDict["url"]);
-        String olID = authorDict["url"].substring(regularExpression.start, regularExpression.end - 1);
+        RegExpMatch regularExpression =
+            RegExp("OL.*\/").firstMatch(authorDict["url"]);
+        String olID = authorDict["url"]
+            .substring(regularExpression.start, regularExpression.end - 1);
         Map<String, dynamic> authorInfo = {"name": author, "id": olID};
         returnList.add(IDEntity.fromJson(authorInfo));
       }
@@ -156,18 +183,26 @@ Future<List<IDEntity>> parseAuthors(List<dynamic> potentialAuthors) async {
   return returnList;
 }
 
-Future<IDEntity> getOrCreateIDEntity(String entityName, IDEntityType entityType) async {
-  String entitySafe = entityType.toString().replaceAll(RegExp("IDEntityType."), "");
-  http.Response entityRes = await http.get("$LIBRARY_API/$entitySafe?name=$entityName");
+List<Map<String, String>> IDEntityListToMap(List<IDEntity> values) {
+  return values.map((e) => {"name": e.name, "id": e.id}).toList();
+}
+
+Future<IDEntity> getOrCreateIDEntity(
+    String entityName, IDEntityType entityType) async {
+  String entitySafe =
+      entityType.toString().replaceAll(RegExp("IDEntityType."), "");
+  http.Response entityRes =
+      await http.get("$LIBRARY_API/$entitySafe?name=$entityName");
   Map<String, dynamic> jsonRes = json.decode(entityRes.body);
   if (entityRes.statusCode == 200 && jsonRes["exact_match"]) {
     return IDEntity.fromJson(jsonRes["results"][0]);
   } else if (entityRes.statusCode == 404) {
-    http.Response publisherCreateRes = await http.post("$LIBRARY_API/$entitySafe",
-        body: json.encode(
-          {"name": entityName},
-        ),
-        headers: {"content-type": "application/json"});
+    http.Response publisherCreateRes =
+        await http.post("$LIBRARY_API/$entitySafe",
+            body: json.encode(
+              {"name": entityName},
+            ),
+            headers: {"content-type": "application/json"});
     if (publisherCreateRes.statusCode == 200) {
       return IDEntity.fromJson(json.decode(publisherCreateRes.body));
     } else {
@@ -183,7 +218,8 @@ Future<IDEntity> getOrCreateIDEntity(String entityName, IDEntityType entityType)
 }
 
 Future<Map<String, dynamic>> searchPublishers(String searchTerm) async {
-  http.Response searchRes = await http.get("$LIBRARY_API/publisher?name=$searchTerm");
+  http.Response searchRes =
+      await http.get("$LIBRARY_API/publisher?name=$searchTerm");
   if (searchRes.statusCode == 200) {
     Map<String, dynamic> searchResJson = json.decode(searchRes.body);
     List<IDEntity> publishers = [];
@@ -200,7 +236,8 @@ Future<Map<String, dynamic>> searchPublishers(String searchTerm) async {
 
 Future<Map<String, dynamic>> searchAuthors(String searchTerm) async {
   // TODO: this is again copy/pasted from above, thus needs to be refactored
-  http.Response searchRes = await http.get("$LIBRARY_API/author?name=$searchTerm");
+  http.Response searchRes =
+      await http.get("$LIBRARY_API/author?name=$searchTerm");
   if (searchRes.statusCode == 200) {
     Map<String, dynamic> searchResJson = json.decode(searchRes.body);
     List<IDEntity> publishers = [];
@@ -215,15 +252,15 @@ Future<Map<String, dynamic>> searchAuthors(String searchTerm) async {
   }
 }
 
-
-
-Future<List<IDEntity>> getOrCreatePublishers(List<String> publisherNames) async {
+Future<List<IDEntity>> getOrCreatePublishers(
+    List<String> publisherNames) async {
   if (publisherNames == null) {
     return [];
   }
   List<IDEntity> publishers = [];
   for (String publisher in publisherNames) {
-    IDEntity currentPub = await getOrCreateIDEntity(publisher, IDEntityType.publisher);
+    IDEntity currentPub =
+        await getOrCreateIDEntity(publisher, IDEntityType.publisher);
     if (currentPub != null) {
       publishers.add(currentPub);
     } else {
@@ -235,7 +272,8 @@ Future<List<IDEntity>> getOrCreatePublishers(List<String> publisherNames) async 
 
 Future<IDEntity> getOrCreateAuthor(IDEntity author) async {
   // TODO: Lots of copy and pasted code
-  http.Response entityRes = await http.get("$LIBRARY_API/author?olid=${author.id}");
+  http.Response entityRes =
+      await http.get("$LIBRARY_API/author?olid=${author.id}");
   Map<String, dynamic> jsonRes = json.decode(entityRes.body);
   if (entityRes.statusCode == 200) {
     return IDEntity.fromJson(jsonRes["results"]);
@@ -278,11 +316,15 @@ Future<List<IDEntity>> getOrCreateAuthors(List<IDEntity> authors) async {
 Future<Book> parseBook(http.Response res) async {
   Map<String, dynamic> jsonResponse = json.decode(res.body);
   List<IDEntity> authorsList;
-  String openLibID = (jsonResponse["key"] as String).replaceAll(RegExp("/books/"), "");
+  String openLibID =
+      (jsonResponse["key"] as String).replaceAll(RegExp("/books/"), "");
   if (jsonResponse["authors"] == null) {
-    http.Response authorRes = await http.get("$OPEN_LIB_API/api/books?bibkeys=OLID:$openLibID&jscmd=data&format=json");
+    http.Response authorRes = await http.get(
+        "$OPEN_LIB_API/api/books?bibkeys=OLID:$openLibID&jscmd=data&format=json");
     if (authorRes.statusCode == 200) {
-      List<dynamic> authorsDicts = json.decode(authorRes.body)["OLID:$openLibID"]["authors"] as List<dynamic>;
+      List<dynamic> authorsDicts =
+          json.decode(authorRes.body)["OLID:$openLibID"]["authors"]
+              as List<dynamic>;
       authorsList = await parseAuthors(authorsDicts);
     } else {
       // TODO: This is the error case where there was not authors
@@ -301,7 +343,8 @@ Future<Book> parseBook(http.Response res) async {
   if (jsonResponse["publishers"] == null) {
     jsonResponse["publishers"] = [];
   } else {
-    jsonResponse["publishers"] = await getOrCreatePublishers(List<String>.from(jsonResponse["publishers"]));
+    jsonResponse["publishers"] = await getOrCreatePublishers(
+        List<String>.from(jsonResponse["publishers"]));
   }
 
   // Sets isbn_13 to isbn_10 if no isbn_13 is present
@@ -365,7 +408,8 @@ Future<List<Work>> searchOLByName(String searchTerm, {String publisher}) async {
   if (publisher != null) {
     searchQuery = "$searchQuery&publisher=$publisher";
   }
-  http.Response searchResult = await http.get("$OPEN_LIB_API/search.json?$searchQuery");
+  http.Response searchResult =
+      await http.get("$OPEN_LIB_API/search.json?$searchQuery");
   if (searchResult.statusCode == 200) {
     Map<String, dynamic> jsonResponse = json.decode(searchResult.body);
     List<Work> works = [];
@@ -377,7 +421,8 @@ Future<List<Work>> searchOLByName(String searchTerm, {String publisher}) async {
       workRes["title"] ??= "";
       parsedResponse["title"] = workRes["title"];
       workRes["seed"] ??= [];
-      parsedResponse["bookLinks"] = List<String>.from(workRes["seed"].where((dynamic link) {
+      parsedResponse["bookLinks"] =
+          List<String>.from(workRes["seed"].where((dynamic link) {
         if ((link as String).startsWith("/books")) {
           return true;
         } else {
